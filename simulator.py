@@ -70,14 +70,48 @@ class QuadCopter(object):
         self.pen_vy = self.pen_vy0
         self.time   = 0.0  
 
-    def step(self, uu):
+    def forces_moments(self, delta):
+        delta = np.asarray(delta)*3.142/180
+        delta = delta.reshape([4,1])
+        # Mapping from propellers to uu
+        sp = np.sin(self.phi)
+        cp = np.cos(self.phi)
+        st = np.sin(self.theta)
+        ct = np.cos(self.theta)
+        ss = np.sin(self.psi)
+        cs = np.cos(self.psi)
+        tt = np.tan(self.theta)
+
+        #  M matrix
+        M = np.mat([[self.k1, self.k1, self.k1, self.k1],
+             [0, -self.l*self.k1, 0, self.l*self.k1],
+             [self.l*self.k1, 0, -self.l*self.k1, 0],
+             [-self.k2, self.k2, -self.k2, self.k2]
+             ])
+        
+        #  compute external forces and torques on aircraft
+        F_T = M*delta;
+
+        F = F_T[0];
+        Torque = F_T[1:4]
+
+        f_gravity = np.mat([[-self.gravity*self.mass*st],
+                     [self.gravity*self.mass*ct*sp],
+                     [self.gravity*self.mass*ct*cp]
+                     ])
+        Force = f_gravity - np.asarray([[0], [0] , [F]]);
+        uu = np.vstack((Force, Torque))
+        return uu
+
+    def step(self, delta):
      # input
-        fx    = uu[0]
-        fy    = uu[1]
-        fz    = uu[2]
-        taup  = uu[3] #tau phi
-        taut  = uu[4] #tau theta
-        taus  = uu[5] #tau psi
+        uu = self.forces_moments(delta)
+        fx    = uu[0, 0]
+        fy    = uu[1, 0]
+        fz    = uu[2, 0]
+        taup  = uu[3, 0] #tau phi
+        taut  = uu[4, 0] #tau theta
+        taus  = uu[5, 0] #tau psi
     
         sp = np.sin(self.phi)
         cp = np.cos(self.phi)
@@ -176,3 +210,14 @@ class QuadCopter(object):
         self.pen_vy,]
         )
         return states
+
+
+
+
+
+
+
+
+
+
+

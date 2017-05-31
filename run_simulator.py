@@ -47,13 +47,13 @@ def main():
     quad  = QuadCopter()
     time  = 10 # sec
     steps = int(time/quad.Ts)
-    uu    = [0, 0, 0.26, 0, 0, 0]
+    delta    = [1.5, 1.5, 1.5, 1.5]
 
     print "Simulate %i sec need total %i steps" %(time, steps)
 
     states = np.zeros([steps, quad.stateSpace])
     for i in range(steps):
-        state = quad.step(uu)
+        state = quad.step(delta)
         states[i] = state
 
     plot_states(states)
