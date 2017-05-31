@@ -9,23 +9,23 @@ import numpy as np
 class QuadCopter(object):
     def __init__(self, Ts=0.01):
         # simulator  step time
-        self.Ts = Ts
-        self.stateSpace = 16
+        self.Ts          = Ts
+        self.stateSpace  = 16
         self.actionSpace = 4
         
         # physical parameters of airframe
         self.gravity = 9.81
-        self.l    = 0.2 # m, Distance between rotor and center
-        self.k1   = 100.0 # propellers constant
-        self.k2   = 100.0 # propellers constant 
-        self.R    = 0.04 # m, Center mass radius 
-        self.M    = 1.0 # kg, Body weight
-        self.m    = 0.07 #kg, Rotor weight 
-        self.mass = self.M + self.m
-        self.Jx   = 2.0*self.M*self.R**2.0/5 + 2.0*self.l*self.m
-        self.Jy   = 2.0*self.M*self.R**2.0/5 + 2.0*self.l*self.m
-        self.Jz   = 2.0*self.M*self.R**2.0/5 + 4.0*self.l*self.m
-        self.Jxz  = 0.0
+        self.l       = 0.2      # m, Distance between rotor and center
+        self.k1      = 100.0    # propellers constant
+        self.k2      = 100.0    # propellers constant 
+        self.R       = 0.04     # m, Center mass radius 
+        self.M       = 1.0      # kg, Body weight
+        self.m       = 0.07     # kg, Rotor weight 
+        self.mass    = self.M + self.m
+        self.Jx      = 2.0*self.M*self.R**2.0/5 + 2.0*self.l*self.m
+        self.Jy      = 2.0*self.M*self.R**2.0/5 + 2.0*self.l*self.m
+        self.Jz      = 2.0*self.M*self.R**2.0/5 + 4.0*self.l*self.m
+        self.Jxz     = 0.0
 
         # initial conditions
         self.pn0    = 0.0  # initial North position
@@ -89,8 +89,8 @@ class QuadCopter(object):
 
      # translational kinematics
         rotation_position = np.mat([[ct*cs, sp*st*cs-cp*ss, cp*st*cs+sp*ss], 
-                                 [ct*ss, sp*st*ss+cp*cs, cp*st*ss-sp*cs],
-                                 [-st,   sp*ct,          cp*ct]])
+                                    [ct*ss, sp*st*ss+cp*cs, cp*st*ss-sp*cs],
+                                    [-st,   sp*ct,          cp*ct]])
                                    
         position_dot = rotation_position * np.mat([self.u,self.v,self.w]).T
         pndot = position_dot[0,0]
@@ -104,13 +104,13 @@ class QuadCopter(object):
     
      # rotational kinematics
         rotation_angle = np.mat([[1, sp*tt, cp*tt],
-                              [0, cp,    -sp],
-                              [0, sp/ct, cp/ct]])
+                                 [0, cp,    -sp],
+                                 [0, sp/ct, cp/ct]])
                       
         angle_dot = rotation_angle * np.mat([self.p, self.q, self.r]).T
-        phidot   = angle_dot[0,0]
-        thetadot = angle_dot[1,0]
-        psidot   = angle_dot[2,0]
+        phidot    = angle_dot[0,0]
+        thetadot  = angle_dot[1,0]
+        psidot    = angle_dot[2,0]
 
      # rorational dynamics
         pdot = (self.q*self.r*(self.Jy-self.Jz)/self.Jx) + (taup/self.Jx)
@@ -119,14 +119,14 @@ class QuadCopter(object):
 
      # inverted pendulum kinematics
         pen_accel = rotation_position * np.mat([udot,vdot,wdot]).T
-        xddot = pen_accel[0,0]
-        yddot = pen_accel[1,0]
-        zddot = pen_accel[2,0]
+        xddot     = pen_accel[0,0]
+        yddot     = pen_accel[1,0]
+        zddot     = pen_accel[2,0]
 
      # inverted pendulum dynamics
-        pen_zeta = np.sqrt(self.pen_l**2.0 - self.pen_x**2.0 - self.pen_y**2.0)
-        pen_xdot = self.pen_vx
-        pen_ydot = self.pen_vy
+        pen_zeta  = np.sqrt(self.pen_l**2.0 - self.pen_x**2.0 - self.pen_y**2.0)
+        pen_xdot  = self.pen_vx
+        pen_ydot  = self.pen_vy
         pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_x**2.0)) * (xddot+(pen_xdot**2.0*self.pen_x+pen_ydot**2.0*self.pen_x)/(pen_zeta**2.0) \
                   + (pen_xdot**2.0*self.pen_x**3.0+2*pen_xdot*pen_ydot*self.pen_x**2.0*self.pen_y+pen_ydot**2.0*self.pen_y**2.0*self.pen_x)/(pen_zeta**4.0) \
                   - (self.pen_x*(zddot+self.gravity))/(pen_zeta))

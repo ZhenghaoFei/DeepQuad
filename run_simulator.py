@@ -44,10 +44,10 @@ def plot_states(states):
     plt.show()
 
 def main():
-    quad = QuadCopter()
-    time = 10 # sec
+    quad  = QuadCopter()
+    time  = 10 # sec
     steps = int(time/quad.Ts)
-    uu = [0, 0, 0.26, 0, 0, 0]
+    uu    = [0, 0, 0.26, 0, 0, 0]
 
     print "Simulate %i sec need total %i steps" %(time, steps)
 
