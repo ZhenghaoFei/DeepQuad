@@ -18,9 +18,9 @@ MAX_EPISODES = 50000
 MAX_EP_TIME = 2 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 # Base learning rate for the Actor network
-ACTOR_LEARNING_RATE = 0.000001
+ACTOR_LEARNING_RATE = 1e-6
 # Base learning rate for the Critic Network
-CRITIC_LEARNING_RATE = 0.000001
+CRITIC_LEARNING_RATE = 1e-6
 # Discount factor 
 GAMMA = 0.99
 # Soft target update param
@@ -299,7 +299,7 @@ def train(sess, env, actor, critic, reward_fc):
     # Initialize replay memory
     replay_buffer = ReplayBuffer(BUFFER_SIZE, RANDOM_SEED)
     tic = time.time()
-
+    last_epreward = 0 
     for i in xrange(MAX_EPISODES):
 
         s = env.reset()
@@ -364,7 +364,11 @@ def train(sess, env, actor, critic, reward_fc):
 
                 # writer.add_summary(summary_str, i)
                 # writer.flush()
-
+                if ep_reward < last_epreward and last_epreward != 0:
+                    actor.learning_rate /= 10
+                    critic.learning_rate /= 10
+                    print "lr decay to ", actor.learning_rate
+                last_epreward = ep_reward
                 print '| Reward: %.2i' % int(ep_reward), " | Episode", i, \
                         '| Qmax: %.4f' % (ep_ave_max_q / float(j+1)), ' | Time: %.2f' %(time_gap)
                 tic = time.time()
