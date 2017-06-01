@@ -16,7 +16,7 @@ def plot_states(states):
     axes[0, 1].plot(states[:,1])
     axes[0, 1].set_title('pe')
     axes[0, 2].plot(-states[:,2])
-    axes[0, 2].set_title('pd')
+    axes[0, 2].set_title('h')
     axes[1, 0].plot(states[:,3])
     axes[1, 0].set_title('u')
     axes[1, 1].plot(states[:,4])
@@ -40,6 +40,7 @@ def plot_states(states):
     axes[4, 1].plot(states[:,13])
     axes[4, 1].set_title('pen_y')
     axes[4, 2].plot(states[:,14])
+    axes[4, 2].set_title('pen_vx')
     fig.subplots_adjust(hspace=1.4) 
     plt.show()
 
@@ -47,7 +48,7 @@ def main():
     quad  = QuadCopter()
     time  = 10 # sec
     steps = int(time/quad.Ts)
-    delta    = [1.5, 1.5, 1.5, 1.5]
+    delta    = [1, 1, 1, 1]
 
     print "Simulate %i sec need total %i steps" %(time, steps)
 
