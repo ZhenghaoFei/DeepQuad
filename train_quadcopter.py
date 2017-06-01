@@ -1,15 +1,12 @@
 # This file is aim to train the quadcopter keet at a constant position
 
-import tensorflow as tf
-import tensorflow.contrib.layers as layers
-
 import numpy as np
-import tflearn
+# import tflearn
 import time
-
 from simulator import QuadCopter
 from replay_buffer import ReplayBuffer
-
+import tensorflow as tf
+import tensorflow.contrib.layers as layers
 # ==========================
 #   Training Parameters
 # =========================
@@ -86,18 +83,23 @@ class ActorNetwork(object):
         self.num_trainable_vars = len(self.network_params) + len(self.target_network_params)
 
     def create_actor_network(self): 
-        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
-        # net = layers.fully_connected(inputs, num_outputs=500, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        # net = layers.fully_connected(net, num_outputs=500, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
+        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        net = tf.layers.batch_normalization(net)
+        net = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        net = tf.layers.batch_normalization(net)
+        out_w = tf.Variable(np.random.randn(300, self.a_dim)*3e-3, dtype=tf.float32)
+        out_b = tf.Variable(tf.zeros([self.a_dim]), dtype=tf.float32, name="out_b")
+        out = tf.nn.sigmoid(tf.matmul(net, out_w) +out_b)
         # out = layers.fully_connected(net, num_outputs=self.a_dim, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.sigmoid)
-        # scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_limit to action_limit
-        inputs = tflearn.input_data(shape=[None, self.s_dim])
-        net = tflearn.fully_connected(inputs, 400, activation='relu')
-        net = tflearn.fully_connected(net, 300, activation='relu')
-        # Final layer weights are init to Uniform[-3e-3, 3e-3]
-        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        out = tflearn.fully_connected(net, self.a_dim, activation='sigmoid', weights_init=w_init)
-        scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_bound to action_bound
+        scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_limit to action_limit
+        # inputs = tflearn.input_data(shape=[None, self.s_dim])
+        # net = tflearn.fully_connected(inputs, 400, activation='relu')
+        # net = tflearn.fully_connected(net, 300, activation='relu')
+        # # Final layer weights are init to Uniform[-3e-3, 3e-3]
+        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
+        # out = tflearn.fully_connected(net, self.a_dim, activation='sigmoid', weights_init=w_init)
+        # scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_bound to action_bound
         return inputs, out, scaled_out 
 
     def train(self, inputs, a_gradient):
@@ -162,34 +164,36 @@ class CriticNetwork(object):
         self.action_grads = tf.gradients(self.out, self.action)
 
     def create_critic_network(self):
-        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
-        # action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
+        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
+        action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
 
-        # net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        # # # Add the action tensor in the 2nd hidden layer
-        # # # Use two temp layers to get the corresponding weights and biases 
+        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # # Add the action tensor in the 2nd hidden layer
+        # # Use two temp layers to get the corresponding weights and biases 
+        net = tf.layers.batch_normalization(net)
 
-        # t1 = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
-        # t2 = layers.fully_connected(action, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        t1 = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        t2 = layers.fully_connected(action, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
-        # net = tf.nn.relu(t1 + t2)
-        # out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        net = tf.nn.relu(t1 + t2)
+        net = tf.layers.batch_normalization(net)
+        out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
-        inputs = tflearn.input_data(shape=[None, self.s_dim])
-        action = tflearn.input_data(shape=[None, self.a_dim])
-        net = tflearn.fully_connected(inputs, 400, activation='relu')
+        # inputs = tflearn.input_data(shape=[None, self.s_dim])
+        # action = tflearn.input_data(shape=[None, self.a_dim])
+        # net = tflearn.fully_connected(inputs, 400, activation='relu')
 
-        # Add the action tensor in the 2nd hidden layer
-        # Use two temp layers to get the corresponding weights and biases
-        t1 = tflearn.fully_connected(net, 300)
-        t2 = tflearn.fully_connected(action, 300)
+        # # Add the action tensor in the 2nd hidden layer
+        # # Use two temp layers to get the corresponding weights and biases
+        # t1 = tflearn.fully_connected(net, 300)
+        # t2 = tflearn.fully_connected(action, 300)
 
-        net = tflearn.activation(tf.matmul(net,t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
+        # net = tflearn.activation(tf.matmul(net,t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
 
         # linear layer connected to 1 output representing Q(s,a) 
         # Weights are init to Uniform[-3e-3, 3e-3]
-        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        out = tflearn.fully_connected(net, 1, weights_init=w_init)
+        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
+        # out = tflearn.fully_connected(net, 1, weights_init=w_init)
         return inputs, action, out
 
     def train(self, inputs, action, predicted_q_value):
@@ -349,7 +353,7 @@ def train(sess, env, actor, critic, reward_fc):
             s = s2
             ep_reward += r
 
-            if terminal or j == MAX_EP_STEPS-1:
+            if terminal or j == MAX_EP_STEPS-1 or r < -10000:
                 print s[0:3]
                 time_gap = time.time() - tic
 
@@ -385,8 +389,10 @@ def main(_):
 
         hover_position = np.asarray([0, 0, 0])
         reward_fc = reward_function_hover_decorator(hover_position)
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
 
-        with tf.Session() as sess:
+        with tf.Session(config=config) as sess:
             actor = ActorNetwork(sess, state_dim, action_dim, action_limit, \
                 ACTOR_LEARNING_RATE, TAU)
 

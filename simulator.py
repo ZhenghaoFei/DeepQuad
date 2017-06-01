@@ -124,18 +124,24 @@ class QuadCopter(object):
         uu = np.vstack((Force, Torque))
         return uu
 
-    def step(self, delta):
+    def step(self, delta, disturbance=False):
         terminated = False
         info = 'normal'
+
      # input
         uu = self.forces_moments(delta)
         fx    = uu[0, 0]
         fy    = uu[1, 0]
-        fz    = uu[2, 0]
+        fz    = uu[2, 0]       
         taup  = uu[3, 0] #tau phi
         taut  = uu[4, 0] #tau theta
         taus  = uu[5, 0] #tau psi
-    
+        if disturbance:
+            max_wind_force = 0.05 
+            fx += numpy.random.rand()*max_wind_force 
+            fy += numpy.random.rand()*max_wind_force
+            fz += numpy.random.rand()*max_wind_force    
+
         sp = np.sin(self.phi)
         cp = np.cos(self.phi)
         st = np.sin(self.theta)
@@ -181,18 +187,31 @@ class QuadCopter(object):
         zddot     = pen_accel[2,0]
 
      # inverted pendulum dynamics
-        # pen_zeta  = np.sqrt(self.pen_l**2.0 - self.pen_x**2.0 - self.pen_y**2.0)
-        # pen_xdot  = self.pen_vx
-        # pen_ydot  = self.pen_vy
-        # pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_x**2.0)) * (xddot+(pen_xdot**2.0*self.pen_x+pen_ydot**2.0*self.pen_x)/(pen_zeta**2.0) \
-        #           + (pen_xdot**2.0*self.pen_x**3.0+2*pen_xdot*pen_ydot*self.pen_x**2.0*self.pen_y+pen_ydot**2.0*self.pen_y**2.0*self.pen_x)/(pen_zeta**4.0) \
-        #           - (self.pen_x*(zddot+self.gravity))/(pen_zeta))
-        # pen_beta  = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_y**2.0)) * (yddot+(pen_ydot**2.0*self.pen_y+pen_xdot**2.0*self.pen_y)/(pen_zeta**2.0) \
-        #           + (pen_ydot**2.0*self.pen_y**3.0+2*pen_ydot*pen_xdot*self.pen_y**2.0*self.pen_x+pen_xdot**2.0*self.pen_x**2.0*self.pen_y)/(pen_zeta**4.0) \
-        #           - (self.pen_y*(zddot+self.gravity))/(pen_zeta))
-        # pen_vxdot = (pen_alpha - pen_beta*self.pen_x*self.pen_y/((self.pen_l**2.0-self.pen_y**2.0)*pen_zeta**2.0)) \
-        #           * (1 - (self.pen_x**2.0*self.pen_y**2.0)/((self.pen_l**2.0-self.pen_y**2.0)**2.0*pen_zeta**4.0))
-        # pen_vydot = pen_beta - (pen_vxdot*self.pen_x*self.pen_y)/(self.pen_l**2.0-self.pen_x**2.0)
+        # zeta_square = self.pen_l**2.0 - self.pen_x**2.0 - self.pen_y**2.0
+
+        # if zeta_square < 0:
+        #     terminated = True
+        #     info = "zeta_square < 0"    
+        #     pen_zeta  = 0
+        #     pen_xdot  = 0
+        #     pen_ydot  = 0
+        #     pen_alpha = 0
+        #     pen_beta  = 0
+        #     pen_vxdot = 0
+        #     pen_vydot = 0
+        # else:
+        #     pen_zeta  = np.sqrt(zeta_square)
+        #     pen_xdot  = self.pen_vx
+        #     pen_ydot  = self.pen_vy
+        #     pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_x**2.0)) * (xddot+(pen_xdot**2.0*self.pen_x+pen_ydot**2.0*self.pen_x)/(pen_zeta**2.0) \
+        #               + (pen_xdot**2.0*self.pen_x**3.0+2*pen_xdot*pen_ydot*self.pen_x**2.0*self.pen_y+pen_ydot**2.0*self.pen_y**2.0*self.pen_x)/(pen_zeta**4.0) \
+        #               - (self.pen_x*(zddot+self.gravity))/(pen_zeta))
+        #     pen_beta  = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_y**2.0)) * (yddot+(pen_ydot**2.0*self.pen_y+pen_xdot**2.0*self.pen_y)/(pen_zeta**2.0) \
+        #               + (pen_ydot**2.0*self.pen_y**3.0+2*pen_ydot*pen_xdot*self.pen_y**2.0*self.pen_x+pen_xdot**2.0*self.pen_x**2.0*self.pen_y)/(pen_zeta**4.0) \
+        #               - (self.pen_y*(zddot+self.gravity))/(pen_zeta))
+        #     pen_vxdot = (pen_alpha - pen_beta*self.pen_x*self.pen_y/((self.pen_l**2.0-self.pen_y**2.0)*pen_zeta**2.0)) \
+        #               * (1 - (self.pen_x**2.0*self.pen_y**2.0)/((self.pen_l**2.0-self.pen_y**2.0)**2.0*pen_zeta**4.0))
+            # pen_vydot = pen_beta - (pen_vxdot*self.pen_x*self.pen_y)/(self.pen_l**2.0-self.pen_x**2.0)
         pen_zeta  = 0
         pen_xdot  = 0
         pen_ydot  = 0
@@ -240,7 +259,6 @@ class QuadCopter(object):
         )
 
         if  terminated:
-            info = 'terminated'
             self.reset()
 
         return states, terminated, info
