@@ -8,11 +8,12 @@ import numpy as np
 
 class QuadCopter(object):
     def __init__(self, Ts=0.01):
-        # simulator  step time
+        # simulator property
         self.Ts          = Ts
         self.stateSpace  = 16
         self.actionSpace = 4
-        
+        self.actionLimit  = 10 # maximum rotor speed degree/s TBD
+
         # physical parameters of airframe
         self.gravity = 9.81
         self.l       = 0.2      # m, Distance between rotor and center
@@ -70,6 +71,26 @@ class QuadCopter(object):
         self.pen_vy = self.pen_vy0
         self.time   = 0.0  
 
+        states = np.asarray([
+        self.pn,    
+        self.pe,    
+        self.pd,    
+        self.u,     
+        self.v,     
+        self.w,     
+        self.phi,   
+        self.theta, 
+        self.psi,   
+        self.p,     
+        self.q,     
+        self.r,     
+        self.pen_x, 
+        self.pen_y, 
+        self.pen_vx,
+        self.pen_vy,]
+        )
+        return states
+
     def forces_moments(self, delta):
         delta = np.asarray(delta)*3.142/180
         delta = delta.reshape([4,1])
@@ -104,6 +125,8 @@ class QuadCopter(object):
         return uu
 
     def step(self, delta):
+        terminated = False
+        info = 'normal'
      # input
         uu = self.forces_moments(delta)
         fx    = uu[0, 0]
@@ -158,19 +181,25 @@ class QuadCopter(object):
         zddot     = pen_accel[2,0]
 
      # inverted pendulum dynamics
-        pen_zeta  = np.sqrt(self.pen_l**2.0 - self.pen_x**2.0 - self.pen_y**2.0)
-        pen_xdot  = self.pen_vx
-        pen_ydot  = self.pen_vy
-        pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_x**2.0)) * (xddot+(pen_xdot**2.0*self.pen_x+pen_ydot**2.0*self.pen_x)/(pen_zeta**2.0) \
-                  + (pen_xdot**2.0*self.pen_x**3.0+2*pen_xdot*pen_ydot*self.pen_x**2.0*self.pen_y+pen_ydot**2.0*self.pen_y**2.0*self.pen_x)/(pen_zeta**4.0) \
-                  - (self.pen_x*(zddot+self.gravity))/(pen_zeta))
-        pen_beta  = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_y**2.0)) * (yddot+(pen_ydot**2.0*self.pen_y+pen_xdot**2.0*self.pen_y)/(pen_zeta**2.0) \
-                  + (pen_ydot**2.0*self.pen_y**3.0+2*pen_ydot*pen_xdot*self.pen_y**2.0*self.pen_x+pen_xdot**2.0*self.pen_x**2.0*self.pen_y)/(pen_zeta**4.0) \
-                  - (self.pen_y*(zddot+self.gravity))/(pen_zeta))
-        pen_vxdot = (pen_alpha - pen_beta*self.pen_x*self.pen_y/((self.pen_l**2.0-self.pen_y**2.0)*pen_zeta**2.0)) \
-                  * (1 - (self.pen_x**2.0*self.pen_y**2.0)/((self.pen_l**2.0-self.pen_y**2.0)**2.0*pen_zeta**4.0))
-        pen_vydot = pen_beta - (pen_vxdot*self.pen_x*self.pen_y)/(self.pen_l**2.0-self.pen_x**2.0)
-
+        # pen_zeta  = np.sqrt(self.pen_l**2.0 - self.pen_x**2.0 - self.pen_y**2.0)
+        # pen_xdot  = self.pen_vx
+        # pen_ydot  = self.pen_vy
+        # pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_x**2.0)) * (xddot+(pen_xdot**2.0*self.pen_x+pen_ydot**2.0*self.pen_x)/(pen_zeta**2.0) \
+        #           + (pen_xdot**2.0*self.pen_x**3.0+2*pen_xdot*pen_ydot*self.pen_x**2.0*self.pen_y+pen_ydot**2.0*self.pen_y**2.0*self.pen_x)/(pen_zeta**4.0) \
+        #           - (self.pen_x*(zddot+self.gravity))/(pen_zeta))
+        # pen_beta  = (-pen_zeta**2.0/(pen_zeta**2.0+self.pen_y**2.0)) * (yddot+(pen_ydot**2.0*self.pen_y+pen_xdot**2.0*self.pen_y)/(pen_zeta**2.0) \
+        #           + (pen_ydot**2.0*self.pen_y**3.0+2*pen_ydot*pen_xdot*self.pen_y**2.0*self.pen_x+pen_xdot**2.0*self.pen_x**2.0*self.pen_y)/(pen_zeta**4.0) \
+        #           - (self.pen_y*(zddot+self.gravity))/(pen_zeta))
+        # pen_vxdot = (pen_alpha - pen_beta*self.pen_x*self.pen_y/((self.pen_l**2.0-self.pen_y**2.0)*pen_zeta**2.0)) \
+        #           * (1 - (self.pen_x**2.0*self.pen_y**2.0)/((self.pen_l**2.0-self.pen_y**2.0)**2.0*pen_zeta**4.0))
+        # pen_vydot = pen_beta - (pen_vxdot*self.pen_x*self.pen_y)/(self.pen_l**2.0-self.pen_x**2.0)
+        pen_zeta  = 0
+        pen_xdot  = 0
+        pen_ydot  = 0
+        pen_alpha = 0
+        pen_beta  = 0
+        pen_vxdot = 0
+        pen_vydot = 0
      # Update the quadcopter states
         self.pn    += pndot*self.Ts 
         self.pe    += pedot*self.Ts 
@@ -209,7 +238,13 @@ class QuadCopter(object):
         self.pen_vx,
         self.pen_vy,]
         )
-        return states
+
+        if  terminated:
+            info = 'terminated'
+            self.reset()
+
+        return states, terminated, info
+
 
 
 
