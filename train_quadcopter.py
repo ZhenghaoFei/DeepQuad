@@ -15,7 +15,7 @@ SIM_TIME_STEP = 0.01
 # Max training steps
 MAX_EPISODES = 50000
 # Max episode length
-MAX_EP_TIME = 2 # second
+MAX_EP_TIME = 1 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 # Base learning rate for the Actor network
 ACTOR_LEARNING_RATE = 1e-6
@@ -84,11 +84,18 @@ class ActorNetwork(object):
 
     def create_actor_network(self): 
         inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
-        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        net = tf.layers.batch_normalization(net)
-        net = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        net = tf.layers.batch_normalization(net)
-        out_w = tf.Variable(np.random.randn(300, self.a_dim)*3e-3, dtype=tf.float32)
+        net = layers.fully_connected(inputs, num_outputs=1024, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        net = tf.expand_dims(net, 1)
+        net = tf.expand_dims(net, -1)
+        net = layers.conv2d(net, num_outputs=32, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        net = layers.conv2d(net, num_outputs=2, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        net = layers.flatten(net)
+        net = layers.fully_connected(net, num_outputs=512, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        out_w = tf.Variable(np.random.randn(512, self.a_dim)*3e-3, dtype=tf.float32)
         out_b = tf.Variable(tf.zeros([self.a_dim]), dtype=tf.float32, name="out_b")
         out = tf.nn.sigmoid(tf.matmul(net, out_w) +out_b)
         # out = layers.fully_connected(net, num_outputs=self.a_dim, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.sigmoid)
@@ -167,17 +174,28 @@ class CriticNetwork(object):
         inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
         action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
 
-        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        net = layers.fully_connected(inputs, num_outputs=1024, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
         # # Add the action tensor in the 2nd hidden layer
         # # Use two temp layers to get the corresponding weights and biases 
-        net = tf.layers.batch_normalization(net)
-
-        t1 = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
-        t2 = layers.fully_connected(action, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        # net = tf.layers.batch_normalization(net)
+        # net = tf.expand_dims(net, 1)
+        # net = tf.expand_dims(net, -1)
+        # net = layers.conv2d(net, num_outputs=32, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # # net = tf.layers.batch_normalization(net)
+        # net = layers.conv2d(net, num_outputs=2, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # # net = tf.layers.batch_normalization(net)
+        # net = layers.flatten(net)
+        t1 = layers.fully_connected(net, num_outputs=512, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        t2 = layers.fully_connected(action, num_outputs=512, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
         net = tf.nn.relu(t1 + t2)
-        net = tf.layers.batch_normalization(net)
-        out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        # net = tf.layers.batch_normalization(net)
+        out_w = tf.Variable(np.random.randn(512, 1)*3e-3, dtype=tf.float32)
+        out_b = tf.Variable(tf.zeros([1]), dtype=tf.float32, name="out_b")
+
+        out = tf.nn.sigmoid(tf.matmul(net, out_w) +out_b)
+
+        # out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
         # inputs = tflearn.input_data(shape=[None, self.s_dim])
         # action = tflearn.input_data(shape=[None, self.a_dim])
@@ -391,7 +409,7 @@ def main(_):
         print('action_dim: ', action_dim)
         print('action_limit: ',action_limit)
 
-        hover_position = np.asarray([0, 0, 0])
+        hover_position = np.asarray([1, 1, 5])
         reward_fc = reward_function_hover_decorator(hover_position)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
