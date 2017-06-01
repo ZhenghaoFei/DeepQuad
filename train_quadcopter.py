@@ -1,6 +1,8 @@
 # This file is aim to train the quadcopter keet at a constant position
 
 import tensorflow as tf
+import tensorflow.contrib.layers as layers
+
 import numpy as np
 import tflearn
 import time
@@ -84,13 +86,18 @@ class ActorNetwork(object):
         self.num_trainable_vars = len(self.network_params) + len(self.target_network_params)
 
     def create_actor_network(self): 
+        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
+        # net = layers.fully_connected(inputs, num_outputs=500, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # net = layers.fully_connected(net, num_outputs=500, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # out = layers.fully_connected(net, num_outputs=self.a_dim, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.sigmoid)
+        # scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_limit to action_limit
         inputs = tflearn.input_data(shape=[None, self.s_dim])
         net = tflearn.fully_connected(inputs, 400, activation='relu')
         net = tflearn.fully_connected(net, 300, activation='relu')
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
         out = tflearn.fully_connected(net, self.a_dim, activation='sigmoid', weights_init=w_init)
-        scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_limit to action_limit
+        scaled_out = tf.multiply(out, self.action_limit) # Scale output to -action_bound to action_bound
         return inputs, out, scaled_out 
 
     def train(self, inputs, a_gradient):
@@ -147,13 +154,27 @@ class CriticNetwork(object):
         self.predicted_q_value = tf.placeholder(tf.float32, [None, 1])
 
         # Define loss and optimization Op
-        self.loss = tflearn.mean_square(self.predicted_q_value, self.out)
+        self.loss = tf.losses.mean_squared_error(self.predicted_q_value, self.out)
+
         self.optimize = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
         # Get the gradient of the net w.r.t. the action
         self.action_grads = tf.gradients(self.out, self.action)
 
     def create_critic_network(self):
+        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
+        # action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
+
+        # net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # # # Add the action tensor in the 2nd hidden layer
+        # # # Use two temp layers to get the corresponding weights and biases 
+
+        # t1 = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        # t2 = layers.fully_connected(action, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+
+        # net = tf.nn.relu(t1 + t2)
+        # out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+
         inputs = tflearn.input_data(shape=[None, self.s_dim])
         action = tflearn.input_data(shape=[None, self.a_dim])
         net = tflearn.fully_connected(inputs, 400, activation='relu')
@@ -362,7 +383,7 @@ def main(_):
         print('action_dim: ', action_dim)
         print('action_limit: ',action_limit)
 
-        hover_position = np.asarray([5, 5, 5])
+        hover_position = np.asarray([0, 0, 0])
         reward_fc = reward_function_hover_decorator(hover_position)
 
         with tf.Session() as sess:
