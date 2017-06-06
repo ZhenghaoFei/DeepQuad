@@ -20,7 +20,7 @@ SIM_TIME_STEP = 0.01
 # Max training steps
 MAX_EPISODES = 50000
 # Max episode length
-MAX_EP_TIME = 2 # second
+MAX_EP_TIME = 3 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 # Explore decay rate
 EXPLORE_INIT = 1
@@ -41,7 +41,7 @@ TAU = 0.001
 # ===========================
 
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/ddpg/'
+SUMMARY_DIR = './results/horizontal/'
 SAVE_STEP = 10
 
 RANDOM_SEED = 1234
@@ -199,9 +199,10 @@ class CriticNetwork(object):
         out_w = tf.Variable(np.random.randn(300, 1)*3e-3, dtype=tf.float32)
         out_b = tf.Variable(tf.zeros([1]), dtype=tf.float32, name="out_b")
 
-        out = tf.matmul(net, out_w) + out_b
+        net = tf.matmul(net, out_w) + out_b
+        net = tf.layers.batch_normalization(net)
 
-        # out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
         # tflearn version
         # inputs = tflearn.input_data(shape=[None, self.s_dim])
@@ -445,7 +446,7 @@ def main(_):
         print('max time: ', MAX_EP_TIME)
         print('max step: ',MAX_EP_STEPS)        
 
-        hover_position = np.asarray([0, 0, -50])
+        hover_position = np.asarray([10, 10, 0])
         reward_fc = reward_function_hover_decorator(hover_position)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True

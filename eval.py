@@ -275,6 +275,7 @@ def count_parameters():
         total_parameters += variable_parametes
     print("total_parameters:", total_parameters)
 
+
 # ===========================
 #   Reward functions
 # ===========================
@@ -324,108 +325,32 @@ def train(sess, env, actor, critic, reward_fc):
     else:
         print ("Could not find old network weights")
 
-    # Initialize target network weights
-    actor.update_target_network()
-    critic.update_target_network()
-    count_parameters()
 
-    # Initialize replay memory
-    replay_buffer = ReplayBuffer(BUFFER_SIZE, RANDOM_SEED)
-    tic = time.time()
-    last_epreward = 0 
-    i = global_step.eval()
+    states = np.zeros([MAX_EP_STEPS, env.stateSpace])
 
-    while True:
-        i += 1
-        if i > MAX_EPISODES:
+    for j in xrange(MAX_EP_STEPS):
+
+        a = actor.predict(np.reshape(s, (1, 16)))
+
+        s2, terminal, info = env.step(a[0])
+        states[j] = s2
+
+        r = reward_fc(s2, terminal, info) # calculate reward basec on s2
+
+        s = s2
+        ep_reward += r
+
+        if terminal or j == MAX_EP_STEPS-1 or r < -10000:
+
+            plot_states(states)
+
+            print s[0:3]
+
+            last_epreward = ep_reward
+            print '| Reward: %.2f' % int(ep_reward/(j+1)), " | Episode", i, \
+                    '| Qmax: %.4f' % (ep_ave_max_q / float(j+1))
+
             break
-        print ("Iteration: ", i)
-        explore = EXPLORE_INIT*EXPLORE_DECAY**i
-        explore = max(EXPLORE_MIN, explore)
-        print ("explore: ", explore)
-        s = env.reset()
-
-        ep_reward = 0
-        ep_ave_max_q = 0
-        states = np.zeros([MAX_EP_STEPS, env.stateSpace])
-
-        if i % SAVE_STEP == 0: # save check point every xx episode
-            sess.run(global_step.assign(i))
-            save_path = saver.save(sess, SUMMARY_DIR + "model.ckpt" , global_step = i)
-            print("Model saved in file: %s" % save_path)
-
-        for j in xrange(MAX_EP_STEPS):
-
-            # Added exploration noise
-            exp = np.random.rand() * explore * env.actionLimit
-            a = actor.predict(np.reshape(s, (1, 16))) + exp
-            # a = actor.predict(np.reshape(s, (1, 16))) + (1. / (1. + i))
-
-            s2, terminal, info = env.step(a[0])
-            states[j] = s2
-
-            r = reward_fc(s2, terminal, info) # calculate reward basec on s2
-
-            replay_buffer.add(np.reshape(s, (actor.s_dim,)), np.reshape(a, (actor.a_dim,)), r, \
-                terminal, np.reshape(s2, (actor.s_dim,)))
-
-            # Keep adding experience to the memory until
-            # there are at least minibatch size samples
-            if replay_buffer.size() > MINIBATCH_SIZE:     
-                s_batch, a_batch, r_batch, t_batch, s2_batch = \
-                    replay_buffer.sample_batch(MINIBATCH_SIZE)
-
-                # Calculate targets
-                target_q = critic.predict_target(s2_batch, actor.predict_target(s2_batch))
-
-                y_i = []
-                for k in xrange(MINIBATCH_SIZE):
-                    if t_batch[k]:
-                        y_i.append(r_batch[k])
-                    else:
-                        y_i.append(r_batch[k] + GAMMA * target_q[k])
-
-                # Update the critic given the targets
-                predicted_q_value, _ = critic.train(s_batch, a_batch, np.reshape(y_i, (MINIBATCH_SIZE, 1)))
-            
-                ep_ave_max_q += np.amax(predicted_q_value)
-
-                # Update the actor policy using the sampled gradient
-                a_outs = actor.predict(s_batch)                
-                grads = critic.action_gradients(s_batch, a_outs)
-                actor.train(s_batch, grads[0])
-
-                # Update target networks
-                actor.update_target_network()
-                critic.update_target_network()
-
-            s = s2
-            ep_reward += r
-
-            if terminal or j == MAX_EP_STEPS-1 or r < -10000:
-                # if i > 30:
-                #     plot_states(states)
-
-                print s[0:3]
-                time_gap = time.time() - tic
-
-                # summary_str = sess.run(summary_ops, feed_dict={
-                #     summary_vars[0]: ep_reward,
-                #     summary_vars[1]: ep_ave_max_q / float(j)
-                # })
-
-                # writer.add_summary(summary_str, i)
-                # writer.flush()
-                # if ep_reward < last_epreward and last_epreward != 0:
-                #     actor.learning_rate /= 10
-                #     critic.learning_rate /= 10
-                #     print "lr decay to ", actor.learning_rate
-                last_epreward = ep_reward
-                print '| Reward: %.2f' % int(ep_reward/(j+1)), " | Episode", i, \
-                        '| Qmax: %.4f' % (ep_ave_max_q / float(j+1)), ' | Time: %.2f' %(time_gap)
-                tic = time.time()
-
-                break
 
 
 def main(_):

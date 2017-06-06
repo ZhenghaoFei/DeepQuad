@@ -5,11 +5,48 @@ import tflearn
 import time
 from simulator import QuadCopter
 from replay_buffer import ReplayBuffer
-from  util import *
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
+import matplotlib.pyplot as plt
+
 import sys, os
 
+
+def plot_states(states):
+    # plot
+    fig, axes = plt.subplots(nrows=5, ncols=3, figsize=(10, 10), sharey=True)
+    axes[0, 0].plot(states[:,0])
+    axes[0, 0].set_title('pn')
+    axes[0, 1].plot(states[:,1])
+    axes[0, 1].set_title('pe')
+    axes[0, 2].plot(-states[:,2])
+    axes[0, 2].set_title('h')
+    axes[1, 0].plot(states[:,3])
+    axes[1, 0].set_title('u')
+    axes[1, 1].plot(states[:,4])
+    axes[1, 1].set_title('v')
+    axes[1, 2].plot(states[:,5])
+    axes[1, 2].set_title('w')
+    axes[2, 0].plot(states[:,6])
+    axes[2, 0].set_title('phi')
+    axes[2, 1].plot(states[:,7])
+    axes[2, 1].set_title('theta')
+    axes[2, 2].plot(states[:,8])
+    axes[2, 2].set_title('psi')
+    axes[3, 0].plot(states[:,9])
+    axes[3, 0].set_title('p')
+    axes[3, 1].plot(states[:,10])
+    axes[3, 1].set_title('q')
+    axes[3, 2].plot(states[:,11])
+    axes[3, 2].set_title('r')
+    axes[4, 0].plot(states[:,12])
+    axes[4, 0].set_title('pen_x')
+    axes[4, 1].plot(states[:,13])
+    axes[4, 1].set_title('pen_y')
+    axes[4, 2].plot(states[:,14])
+    axes[4, 2].set_title('pen_vx')
+    fig.subplots_adjust(hspace=1.4) 
+    plt.show()
 
 
 # ==========================
@@ -19,6 +56,7 @@ import sys, os
 SIM_TIME_STEP = 0.01
 # Max training steps
 MAX_EPISODES = 50000
+SAVE_STEP = 1000
 # Max episode length
 MAX_EP_TIME = 2 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
@@ -41,9 +79,7 @@ TAU = 0.001
 # ===========================
 
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/ddpg/'
-SAVE_STEP = 10
-
+SUMMARY_DIR = './results/tf_ddpg'
 RANDOM_SEED = 1234
 # Size of replay buffer
 BUFFER_SIZE = 1e6
@@ -95,30 +131,37 @@ class ActorNetwork(object):
         self.num_trainable_vars = len(self.network_params) + len(self.target_network_params)
 
     def create_actor_network(self): 
-        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
-        net = tf.layers.batch_normalization(inputs)
-        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        net = tf.layers.batch_normalization(net)
+        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
+        # net = tf.layers.batch_normalization(inputs)
+        # net = layers.fully_connected(inputs, num_outputs=1024, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        # # net = tf.expand_dims(net, 1)
+        # # net = tf.expand_dims(net, -1)
+        # # net = layers.conv2d(net, num_outputs=32, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # # net = tf.layers.batch_normalization(net)
+        # # net = layers.conv2d(net, num_outputs=2, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # # net = tf.layers.batch_normalization(net)
+        # # net = layers.flatten(net)
+        # net = layers.fully_connected(net, num_outputs=512, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        # # net = layers.fully_connected(net, num_outputs=512, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.th)
+        # out_w = tf.Variable(np.random.randn(512, self.a_dim)*3e-3, dtype=tf.float32, name="out_w")
+        # out_b = tf.Variable(tf.zeros([self.a_dim]), dtype=tf.float32, name="out_b")
+        # out = tf.tanh(tf.matmul(net, out_w) +out_b)
+        # # out = layers.fully_connected(net, num_outputs=self.a_dim, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.sigmoid)
+        # scaled_out = tf.multiply(out, self.action_limit)# Scale output to -action_limit to action_limit
 
-        net = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        net = tf.layers.batch_normalization(net)
-        # net = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.th)
-        out_w = tf.Variable(np.random.randn(300, self.a_dim)*3e-3, dtype=tf.float32, name="out_w")
-        out_b = tf.Variable(tf.zeros([self.a_dim]), dtype=tf.float32, name="out_b")
-        out = tf.tanh(tf.matmul(net, out_w) +out_b)
-        scaled_out = tf.multiply(out, self.action_limit)# Scale output to -action_limit to action_limit
+        inputs = tflearn.input_data(shape=[None, self.s_dim])
+        net = tflearn.fully_connected(inputs, 400, activation='relu')
+        net = tflearn.fully_connected(net, 300, activation='relu')
+        # Final layer weights are init to Uniform[-3e-3, 3e-3]
+        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
+        out = tflearn.fully_connected(
+            net, self.a_dim, activation='tanh', weights_init=w_init)
+        # Scale output to -action_bound to action_bound
+        scaled_out = tf.multiply(out, self.action_limit)
 
-        ## tflearn version
-        # inputs = tflearn.input_data(shape=[None, self.s_dim])
-        # net = tflearn.fully_connected(inputs, 400, activation='relu')
-        # net = tflearn.fully_connected(net, 300, activation='relu')
-        # # Final layer weights are init to Uniform[-3e-3, 3e-3]
-        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        # out = tflearn.fully_connected(
-        #     net, self.a_dim, activation='tanh', weights_init=w_init)
-        # # Scale output to -action_bound to action_bound
-        # scaled_out = tf.multiply(out, self.action_limit)
-
+        return inputs, out, scaled_out
 
         return inputs, out, scaled_out 
 
@@ -176,8 +219,8 @@ class CriticNetwork(object):
         self.predicted_q_value = tf.placeholder(tf.float32, [None, 1])
 
         # Define loss and optimization Op
-        self.loss = tf.losses.mean_squared_error(self.predicted_q_value, self.out)
-        # self.loss = tflearn.mean_square(self.predicted_q_value, self.out)
+        # self.loss = tf.losses.mean_squared_error(self.predicted_q_value, self.out)
+        self.loss = tflearn.mean_square(self.predicted_q_value, self.out)
 
         self.optimize = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
@@ -185,41 +228,48 @@ class CriticNetwork(object):
         self.action_grads = tf.gradients(self.out, self.action)
 
     def create_critic_network(self):
-        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
-        action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
+        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
+        # action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
 
-        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        # Add the action tensor in the 2nd hidden layer
-        # Use two temp layers to get the corresponding weights and biases 
-        t1 = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
-        t2 = layers.fully_connected(action, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        # net = layers.fully_connected(inputs, num_outputs=1024, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # # # Add the action tensor in the 2nd hidden layer
+        # # # Use two temp layers to get the corresponding weights and biases 
+        # # net = tf.layers.batch_normalization(net)
+        # # net = tf.expand_dims(net, 1)
+        # # net = tf.expand_dims(net, -1)
+        # # net = layers.conv2d(net, num_outputs=32, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # # # net = tf.layers.batch_normalization(net)
+        # # net = layers.conv2d(net, num_outputs=2, kernel_size=1, stride=1,padding='SAME', activation_fn=tf.nn.relu)
+        # # # net = tf.layers.batch_normalization(net)
+        # # net = layers.flatten(net)
+        # t1 = layers.fully_connected(net, num_outputs=512, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        # t2 = layers.fully_connected(action, num_outputs=512, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
-        net = tf.nn.relu(t1 + t2)
-        net = tf.layers.batch_normalization(net)
-        out_w = tf.Variable(np.random.randn(300, 1)*3e-3, dtype=tf.float32)
-        out_b = tf.Variable(tf.zeros([1]), dtype=tf.float32, name="out_b")
+        # net = tf.nn.relu(t1 + t2)
+        # net = tf.layers.batch_normalization(net)
+        # out_w = tf.Variable(np.random.randn(512, 1)*3e-3, dtype=tf.float32)
+        # out_b = tf.Variable(tf.zeros([1]), dtype=tf.float32, name="out_b")
 
-        out = tf.matmul(net, out_w) + out_b
+        # out = tf.matmul(net, out_w) + out_b
 
         # out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
-        # tflearn version
-        # inputs = tflearn.input_data(shape=[None, self.s_dim])
-        # action = tflearn.input_data(shape=[None, self.a_dim])
-        # net = tflearn.fully_connected(inputs, 400, activation='relu')
+        inputs = tflearn.input_data(shape=[None, self.s_dim])
+        action = tflearn.input_data(shape=[None, self.a_dim])
+        net = tflearn.fully_connected(inputs, 400, activation='relu')
 
         # Add the action tensor in the 2nd hidden layer
         # Use two temp layers to get the corresponding weights and biases
-        # t1 = tflearn.fully_connected(net, 300)
-        # t2 = tflearn.fully_connected(action, 300)
+        t1 = tflearn.fully_connected(net, 300)
+        t2 = tflearn.fully_connected(action, 300)
 
-        # net = tflearn.activation(
-        #     tf.matmul(net, t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
+        net = tflearn.activation(
+            tf.matmul(net, t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
 
-        # # linear layer connected to 1 output representing Q(s,a)
-        # # Weights are init to Uniform[-3e-3, 3e-3]
-        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        # out = tflearn.fully_connected(net, 1, weights_init=w_init)
+        # linear layer connected to 1 output representing Q(s,a)
+        # Weights are init to Uniform[-3e-3, 3e-3]
+        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
+        out = tflearn.fully_connected(net, 1, weights_init=w_init)
         return inputs, action, out
 
     def train(self, inputs, action, predicted_q_value):
@@ -297,7 +347,6 @@ def reward_function_hover_decorator(hover_position_set):
         return reward
 
     return reward_function_hover
-
 # ===========================
 #   Agent Training
 # ===========================
@@ -307,7 +356,6 @@ def train(sess, env, actor, critic, reward_fc):
 
     # Set up summary Ops
     summary_ops, summary_vars = build_summaries()
-    global_step = tf.Variable(0, dtype=tf.int32)
 
     sess.run(tf.global_variables_initializer())
     writer = tf.summary.FileWriter(SUMMARY_DIR, sess.graph)
@@ -333,14 +381,10 @@ def train(sess, env, actor, critic, reward_fc):
     replay_buffer = ReplayBuffer(BUFFER_SIZE, RANDOM_SEED)
     tic = time.time()
     last_epreward = 0 
-    i = global_step.eval()
+    explore = EXPLORE_INIT
 
-    while True:
-        i += 1
-        if i > MAX_EPISODES:
-            break
-        print ("Iteration: ", i)
-        explore = EXPLORE_INIT*EXPLORE_DECAY**i
+    for i in xrange(MAX_EPISODES):
+        explore *= EXPLORE_DECAY
         explore = max(EXPLORE_MIN, explore)
         print ("explore: ", explore)
         s = env.reset()
@@ -349,8 +393,7 @@ def train(sess, env, actor, critic, reward_fc):
         ep_ave_max_q = 0
         states = np.zeros([MAX_EP_STEPS, env.stateSpace])
 
-        if i % SAVE_STEP == 0: # save check point every xx episode
-            sess.run(global_step.assign(i))
+        if i % SAVE_STEP == 0 and i!= 0: # save check point every xx episode
             save_path = saver.save(sess, SUMMARY_DIR + "model.ckpt" , global_step = i)
             print("Model saved in file: %s" % save_path)
 

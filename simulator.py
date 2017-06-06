@@ -13,7 +13,7 @@ class QuadCopter(object):
         self.Ts          = Ts
         self.stateSpace  = 16
         self.actionSpace = 4
-        self.actionLimit  = 10 # maximum rotor speed degree/s TBD
+        self.actionLimit  = 2 # maximum rotor speed degree/s TBD
         self.inverted_pendulum = inverted_pendulum
 
     # physical parameters of airframe
@@ -30,7 +30,7 @@ class QuadCopter(object):
     # initial conditions
         self.pn0    = 0.0  # initial North position
         self.pe0    = 0.0  # initial East position
-        self.pd0    = 0.0  # initial Down position (negative altitude)
+        self.pd0    = -10.0  # initial Down position (negative altitude)
         self.u0     = 0.0  # initial velocity along body x-axis
         self.v0     = 0.0  # initial velocity along body y-axis
         self.w0     = 0.0  # initial velocity along body z-axis
@@ -51,6 +51,7 @@ class QuadCopter(object):
         self.reset()
 
     def reset(self):
+        # print "system reset"
         self.pn     = self.pn0
         self.pe     = self.pe0
         self.pd     = self.pd0
@@ -99,6 +100,7 @@ class QuadCopter(object):
 
         uu = np.asarray([self.trunc_error(Force_x), self.trunc_error(Force_y), self.trunc_error(Force_z),
                          self.trunc_error(Torque_x), self.trunc_error(Torque_y), self.trunc_error(Torque_z)])
+        # print uu
         return uu
 
 
@@ -200,6 +202,13 @@ class QuadCopter(object):
                                  pen_xdot,  pen_ydot,   pen_vxdot,  pen_vydot])
         return states_dot
 
+    def naive_int(self, derivative_func, states, Ts, args):
+        states_dot = derivative_func(states, Ts, args[0], args[1], args[2], args[3])
+        states += states_dot*Ts
+        sol =  np.vstack((states_dot, states))
+        return sol
+
+
     def step(self, delta):
         terminated = False
         info = 'normal'
@@ -211,7 +220,9 @@ class QuadCopter(object):
         delta_l = delta[3]
 
     # integral, ode
-        sol = odeint(self.Derivative, self.states, [self.time, self.time+self.Ts], args=(delta_f,delta_r,delta_b,delta_l))
+        sol = odeint(self.Derivative, self.states, [self.time, self.time+self.Ts], args=(delta_f,delta_r,delta_b,delta_l), full_output=False, printmessg=False)
+        # sol = self.naive_int(self.Derivative, self.states, self.Ts, [delta_f,delta_r,delta_b,delta_l])
+
         self.pn     = sol[1,0] 
         self.pe     = sol[1,1] 
         self.pd     = sol[1,2] 
@@ -229,11 +240,17 @@ class QuadCopter(object):
         self.pen_vx = sol[1,14]
         self.pen_vy = sol[1,15]
         self.time   += self.Ts
+
+    # Fail condition check
+        if self.pd0 > 0:
+            terminated = True
+            info = 'crash'   
+            print info         
+
         # print 'Time = %f' %self.time
         self.states = np.asarray([self.pn, self.pe, self.pd, self.u, self.v, self.w, self.phi, self.theta, self.psi,
                                   self.p,  self.q,  self.r,  self.pen_x,  self.pen_y,  self.pen_vx,  self.pen_vy])
         if  terminated:
-            info = 'terminated'
             self.reset()
 
         return self.states, terminated, info
