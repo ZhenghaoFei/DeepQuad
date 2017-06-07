@@ -1,12 +1,6 @@
-#!/usr/bin/python2.7
-# Filename: simulator.py
-# Description: This file run and test the simulator and plot state figures
-# Auther: Zhenghao Fei,  Peng Wei
-
-import numpy as np
+# # This file contains utilities such as plot
 import matplotlib.pyplot as plt
-from simulator import QuadCopter
-
+import numpy as np
 
 def plot_states(states):
     # plot
@@ -44,21 +38,3 @@ def plot_states(states):
     fig.subplots_adjust(hspace=1.4) 
     plt.show()
 
-def main():
-    quad  = QuadCopter(inverted_pendulum=False)
-    time  = 5 # sec
-    steps = int(time/quad.Ts)
-    delta  = [2, 2, 2, 2]
-
-    print "Simulate %i sec need total %i steps" %(time, steps)
-
-    states = np.zeros([steps, quad.stateSpace])
-    for i in range(steps):
-        state ,_ ,_ = quad.step(delta)
-
-        states[i] = state
-    plot_states(states)
-
-
-if __name__ == "__main__":
-    main()

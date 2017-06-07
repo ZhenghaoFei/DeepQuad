@@ -62,9 +62,9 @@ class QuadCopter(object):
         self.pen_vy0   = 0.0 # initial velocity along jv in vehicle frame
 
     # maximum conditions
-        self.pn_max    =  100  # max North position
-        self.pe_max    =  100  # max East position
-        self.pd_max    =  100  # max Down position (negative altitude)
+        self.pn_max    =  20  # max North position
+        self.pe_max    =  20  # max East position
+        self.pd_max    =  20  # max Down position (negative altitude)
         self.u_max     = 10 # max velocity along body x-axis
         self.v_max     = 10 # max velocity along body y-axis
         self.w_max     = 10 # max velocity along body z-axis
