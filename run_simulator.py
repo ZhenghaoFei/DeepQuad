@@ -46,15 +46,17 @@ def plot_states(states):
 
 def main():
     quad  = QuadCopter(inverted_pendulum=False)
-    time  = 5 # sec
+    time  = 10 # sec
     steps = int(time/quad.Ts)
-    delta  = [2, 2, 2, 2]
+    delta  = [1.6, 1.5, 1.4, 1.5]
 
     print "Simulate %i sec need total %i steps" %(time, steps)
 
     states = np.zeros([steps, quad.stateSpace])
     for i in range(steps):
         state ,_ ,_ = quad.step(delta)
+        if i > 2:
+            delta  = [1.5, 1.5, 1.5, 1.5]
 
         states[i] = state
     plot_states(states)

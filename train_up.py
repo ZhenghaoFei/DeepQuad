@@ -39,7 +39,7 @@ TAU = 0.001
 # ===========================
 
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/ddpg/'
+SUMMARY_DIR = './results/up/'
 SAVE_STEP = 50
 
 RANDOM_SEED = 1234
@@ -423,7 +423,7 @@ def main(_):
         print('max time: ', MAX_EP_TIME)
         print('max step: ',MAX_EP_STEPS)        
 
-        hover_position = np.asarray([3, 0, 0])
+        hover_position = np.asarray([0, 0, -30])
         task = hover(hover_position)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True

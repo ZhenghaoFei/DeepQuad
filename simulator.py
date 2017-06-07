@@ -14,7 +14,7 @@ class QuadCopter(object):
         self.max_time = max_time
         self.stateSpace  = 16
         self.actionSpace = 4
-        self.actionLimit  = 5 # maximum rotor speed degree/s TBD
+        self.actionLimit  = 5.0 # maximum rotor speed degree/s TBD
         self.inverted_pendulum = inverted_pendulum
 
     # physical parameters of airframe

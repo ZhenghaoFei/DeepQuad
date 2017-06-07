@@ -1,5 +1,5 @@
 import numpy as np
-from simulator import QuadCopter
+from simulator_di import QuadCopter
 from  util import *
 from quad_task import *
 
@@ -123,7 +123,7 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
     print('max time: ', MAX_EP_TIME)
     print('max step: ',MAX_EP_STEPS)        
 
-    hover_position = np.asarray([0, 0, 0])
+    hover_position = np.asarray([0, 0, -10])
     task = hover(hover_position)
 
     logz.configure_output_dir(logdir)
@@ -192,6 +192,7 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
         paths = []
         while True:
             ob = env.reset()
+            ob_last = np.copy(ob)
             terminated = False
             obs, acs, rewards = [], [], []
             j = 0
@@ -210,9 +211,12 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
 
                 rew = np.asscalar(rew)
                 rewards.append(rew)
-                if done or j >= MAX_EP_STEPS:
+                if done:
                     # print "done"
-                    break                    
+                    print ob_last[0:3]
+                    break       
+                ob_last = np.copy(ob)
+             
             path = {"observation" : np.array(obs), "terminated" : terminated,
                     "reward" : np.array(rewards), "action" : np.array(acs)}
             paths.append(path)
@@ -284,7 +288,7 @@ def main_pendulum1(d):
 
 if __name__ == "__main__":
 
-    general_params = dict(gamma=0.97, animate=False, min_timesteps_per_batch=200, n_iter=3000, initial_stepsize=1e-4)
+    general_params = dict(gamma=0.97, animate=False, min_timesteps_per_batch=400, n_iter=3000, initial_stepsize=1e-7)
     main_pendulum(logdir='./quad/', seed=2, desired_kl=2e-3, vf_type='linear', vf_params={}, **general_params)
 
     # params = [

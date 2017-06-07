@@ -8,13 +8,13 @@ import numpy as np
 from scipy.integrate import odeint
 
 class QuadCopter(object):
-    def __init__(self, Ts=0.01, max_time = 2, inverted_pendulum=True):
+    def __init__(self, Ts=0.01, max_time = 10, inverted_pendulum=True):
     # simulator  step time
         self.Ts          = Ts
         self.max_time = max_time
         self.stateSpace  = 16
-        self.actionSpace = 4
-        self.actionLimit  = 5.0 # maximum rotor speed degree/s TBD
+        self.actionSpace = 6
+        self.actionLimit  = 3.0 # maximum rotor speed degree/s TBD
         self.inverted_pendulum = inverted_pendulum
 
     # physical parameters of airframe
@@ -130,7 +130,7 @@ class QuadCopter(object):
 
 
 
-    def Derivative(self, states, t, delta_f, delta_r, delta_b, delta_l):
+    def Derivative(self, states, t, uu):
     # state variables
         pn     = states[0]    
         pe     = states[1]    
@@ -149,7 +149,7 @@ class QuadCopter(object):
         pen_vx = states[14] 
         pen_vy = states[15] 
     # control inputs
-        uu    = self.forces_moments(delta_f, delta_r, delta_b, delta_l, theta, phi)
+        # uu    = self.forces_moments(delta_f, delta_r, delta_b, delta_l, theta, phi)
         fx    = uu[0]
         fy    = uu[1]
         fz    = uu[2]
@@ -228,26 +228,26 @@ class QuadCopter(object):
                                  pen_xdot,  pen_ydot,   pen_vxdot,  pen_vydot])
         return states_dot
 
-    def naive_int(self, derivative_func, states, Ts, args):
-        states_dot = derivative_func(states, Ts, args[0], args[1], args[2], args[3])
+    def naive_int(self, derivative_func, states, Ts, uu):
+        states_dot = derivative_func(states, Ts, uu)
         states += states_dot*Ts
         sol =  np.vstack((states_dot, states))
         return sol
 
 
-    def step(self, delta):
+    def step(self, uu):
         terminated = False
         info = 'normal'
 
-        delta   = np.asarray(delta)*3.1416/180
-        delta_f = delta[0]
-        delta_r = delta[1]
-        delta_b = delta[2]
-        delta_l = delta[3]
+        # delta   = np.asarray(delta)*3.1416/180
+        # delta_f = delta[0]
+        # delta_r = delta[1]
+        # delta_b = delta[2]
+        # delta_l = delta[3]
 
     # integral, ode
         # sol = odeint(self.Derivative, self.states, [self.time, self.time+self.Ts], args=(delta_f,delta_r,delta_b,delta_l), full_output=False, printmessg=False)
-        sol = self.naive_int(self.Derivative, self.states, self.Ts, [delta_f,delta_r,delta_b,delta_l])
+        sol = self.naive_int(self.Derivative, self.states, self.Ts, uu)
 
         self.pn     = sol[1,0] 
         self.pe     = sol[1,1] 

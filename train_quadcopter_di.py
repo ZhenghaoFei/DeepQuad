@@ -2,7 +2,7 @@
 
 import numpy as np
 import time
-from simulator import QuadCopter
+from simulator_direct_input import QuadCopter
 from replay_buffer import ReplayBuffer
 from  util import *
 from quad_task import *
@@ -18,17 +18,17 @@ SIM_TIME_STEP = 0.01
 # Max training steps
 MAX_EPISODES = 50000
 # Max episode length
-MAX_EP_TIME = 5 # second
+MAX_EP_TIME = 2 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 # Explore decay rate
-EXPLORE_INIT = 1
+EXPLORE_INIT = 0.5
 EXPLORE_DECAY = 0.99
 EXPLORE_MIN = 0.005
 
 # Base learning rate for the Actor network
-ACTOR_LEARNING_RATE = 1e-7
+ACTOR_LEARNING_RATE = 1e-5
 # Base learning rate for the Critic Network
-CRITIC_LEARNING_RATE = 1e-6
+CRITIC_LEARNING_RATE = 1e-4
 # Discount factor 
 GAMMA = 0.99
 # Soft target update param
@@ -334,7 +334,7 @@ def train(sess, env, actor, critic, task):
 
             # Added exploration noise
             # exp = np.random.rand(1, 4) * explore * env.actionLimit
-            exp = np.random.rand(1, 4) * explore * env.actionLimit
+            exp = np.random.rand(1, 6) * explore * env.actionLimit
 
             a = actor.predict(np.reshape(s, (1, 16))) + exp
             # a = [[2,2,2,2]]
@@ -384,8 +384,8 @@ def train(sess, env, actor, critic, task):
 
             ep_reward += r
             if terminal:
-                if i > 30:
-                    plot_states(states)
+                # if i > 30:
+                #     plot_states(states)
 
                 print s[0:3]
                 time_gap = time.time() - tic
@@ -423,7 +423,7 @@ def main(_):
         print('max time: ', MAX_EP_TIME)
         print('max step: ',MAX_EP_STEPS)        
 
-        hover_position = np.asarray([3, 0, 0])
+        hover_position = np.asarray([0, 0, -10])
         task = hover(hover_position)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True

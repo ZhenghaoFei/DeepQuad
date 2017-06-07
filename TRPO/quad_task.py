@@ -18,6 +18,6 @@ class hover(object):
         current_position = states[0:3]
         # last_position = state_last[0:3]
 
-        reward = -np.mean((current_position - self.hover_position_set)**2) + 200
+        reward = -np.mean((current_position - self.hover_position_set)**2)+200
 
         return reward
