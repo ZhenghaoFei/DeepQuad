@@ -12,18 +12,12 @@ class hover(object):
         # hover_position = np.asarray([0, 0, 0]) # pn = 0, pe = 0, pd = 0
         if terminal and info=='outrange':
             print info
-            reward = -1000
-            return reward
-
-        if terminal and info=="pen_zeta<0":
-            print info
-            reward = -1000
+            reward = -10000
             return reward
 
         current_position = states[0:3]
-        error = current_position - self.hover_position_set
-        # print error
         # last_position = state_last[0:3]
-        reward = (-np.mean(error**2))/1000
-        # print reward
+
+        reward = -np.mean((current_position - self.hover_position_set)**2) 
+
         return reward

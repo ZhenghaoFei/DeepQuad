@@ -204,6 +204,9 @@ class QuadCopter(object):
      # inverted pendulum dynamics
         if self.inverted_pendulum: 
             pen_zeta  = np.sqrt(self.pen_l**2.0 - pen_x**2.0 - pen_y**2.0)
+            if pen_zeta <=0:
+                self.terminated = True
+                self.info = "pen_zeta<0"
             pen_xdot  = pen_vx
             pen_ydot  = pen_vy
             pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+pen_x**2.0)) * (xddot+(pen_xdot**2.0*pen_x+pen_ydot**2.0*pen_x)/(pen_zeta**2.0) \
@@ -213,8 +216,8 @@ class QuadCopter(object):
                       + (pen_ydot**2.0*pen_y**3.0+2*pen_ydot*pen_xdot*pen_y**2.0*pen_x+pen_xdot**2.0*pen_x**2.0*pen_y)/(pen_zeta**4.0) \
                       - (pen_y*(zddot+self.gravity))/(pen_zeta))
             pen_vxdot = (pen_alpha - pen_beta*pen_x*pen_y/((self.pen_l**2.0-pen_y**2.0)*pen_zeta**2.0)) \
-                      * (1 - (pen_x**2.0*pen_y**2.0)/((self.pen_l**2.0-pen_y**2.0)**2.0*pen_zeta**4.0))
-            pen_vydot = pen_beta - (pen_vxdot*pen_x*pen_y)/(self.pen_l**2.0-pen_x**2.0)
+                      * (1.0 - (pen_x**2.0*pen_y**2.0)/((self.pen_l**2.0-pen_y**2.0)**2.0*pen_zeta**4.0))
+            pen_vydot = pen_beta - (pen_vxdot*pen_x*pen_y)/((self.pen_l**2.0-pen_x**2.0)*pen_zeta**2.0)
         else:
             pen_zeta  = 0
             pen_xdot  = 0
@@ -236,8 +239,8 @@ class QuadCopter(object):
 
 
     def step(self, uu):
-        terminated = False
-        info = 'normal'
+        self.terminated = False
+        self.info = 'normal'
 
         # delta   = np.asarray(delta)*3.1416/180
         # delta_f = delta[0]
@@ -314,19 +317,19 @@ class QuadCopter(object):
             self.r = -self.r_max
 
         if self.time > self.max_time:
-            terminated = True
-            info = 'timeout'   
+            self.terminated = True
+            self.info = 'timeout'   
     # # Fail condition check
     #     if self.pd > 0:
-    #         terminated = True
-    #         info = 'crash'   
+    #         self.terminated = True
+    #         self.info = 'crash'   
 
         # print 'Time = %f' %self.time
         self.states = np.asarray([self.pn, self.pe, self.pd, self.u, self.v, self.w, self.phi, self.theta, self.psi,
                                   self.p,  self.q,  self.r,  self.pen_x,  self.pen_y,  self.pen_vx,  self.pen_vy])
-        if  terminated:
+        if  self.terminated:
             self.reset()
 
-        return self.states, terminated, info
+        return self.states, self.terminated, self.info
 
 # end class

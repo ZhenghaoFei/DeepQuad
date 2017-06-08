@@ -1,6 +1,13 @@
-# # This file contains utilities such as plot
-import matplotlib.pyplot as plt
+#!/usr/bin/python2.7
+# Filename: simulator.py
+# Description: Direct input rather than RPM,
+# This file run and test the simulator and plot state figures
+# Auther: Zhenghao Fei,  Peng Wei
+
 import numpy as np
+import matplotlib.pyplot as plt
+from simulator_di import QuadCopter
+
 
 def plot_states(states):
     # plot
@@ -36,5 +43,26 @@ def plot_states(states):
     axes[4, 2].plot(states[:,14])
     axes[4, 2].set_title('pen_vx')
     fig.subplots_adjust(hspace=1.4) 
-    # plt.show()
+    plt.show()
 
+def main():
+    quad  = QuadCopter(inverted_pendulum=False)
+    time  = 10 # sec
+    steps = int(time/quad.Ts)
+    uu  = [0, 0, -1, 0, 0, 0]
+
+    print "Simulate %i sec need total %i steps" %(time, steps)
+
+    states = np.zeros([steps, quad.stateSpace])
+    for i in range(steps):
+        kk = np.asarray(uu) + np.random.rand()*0.1
+        state ,_ ,_ = quad.step(kk)
+
+
+
+        states[i] = state
+    plot_states(states)
+
+
+if __name__ == "__main__":
+    main()

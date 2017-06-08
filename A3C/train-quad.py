@@ -47,7 +47,7 @@ PREDICTOR_THREAD_PER_GPU = 2
 PREDICTOR_THREAD = None
 EVALUATE_PROC = min(multiprocessing.cpu_count() // 2, 20)
 
-NUM_ACTIONS = None
+NUM_ACTIONS = 3
 ENV_NAME = None
 
 
@@ -235,15 +235,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', help='comma separated list of GPU(s) to use.')
     parser.add_argument('--load', help='load model')
-    parser.add_argument('--env', help='env', required=True)
+    # parser.add_argument('--env', help='env', required=True)
     parser.add_argument('--task', help='task to perform',
                         choices=['play', 'eval', 'train'], default='train')
     args = parser.parse_args()
 
-    ENV_NAME = args.env
-    assert ENV_NAME
-    p = get_player()
-    del p    # set NUM_ACTIONS
+    # ENV_NAME = args.env
+    # assert ENV_NAME
+    # p = get_player()
+    # del p    # set NUM_ACTIONS
 
     if args.gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu

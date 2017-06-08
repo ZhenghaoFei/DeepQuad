@@ -1,3 +1,5 @@
+# This version works fine for gym
+
 import numpy as np
 from simulator_di import QuadCopter
 from  util import *
@@ -109,12 +111,14 @@ class LinearValueFunction(object):
         return np.concatenate([np.ones([X.shape[0], 1]), X, np.square(X)/2.0], axis=1)
 
 
-def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_stepsize, desired_kl, vf_type, vf_params, animate=False):
+def main_quad(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_stepsize, desired_kl, vf_type, vf_params, animate=False):
     tf.set_random_seed(seed)
     np.random.seed(seed)
+
+    # Quad
     env  = QuadCopter(SIM_TIME_STEP, inverted_pendulum=False)
     ob_dim = env.stateSpace
-    ac_dim = env.actionSpace
+    ac_dim = 1
     ac_lim = env.actionLimit
     print("Quadcopter created")
     print('state_dim: ', ob_dim)
@@ -122,9 +126,14 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
     print('action_limit: ',ac_lim)
     print('max time: ', MAX_EP_TIME)
     print('max step: ',MAX_EP_STEPS)        
-
-    hover_position = np.asarray([0, 0, -10])
+    hover_position = np.asarray([0, 0, -50])
     task = hover(hover_position)
+
+    # # Gym
+    # env = gym.make("quad-v0")
+    # ob_dim = env.observation_space.shape[0] 
+    # ac_dim = env.action_space.shape[0]
+
 
     logz.configure_output_dir(logdir)
     if vf_type == 'linear':
@@ -140,20 +149,23 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
     sy_ac_n = tf.placeholder(shape=[None, ac_dim], name="ac", dtype=tf.float32) # batch of actions taken by the policy, used for policy gradient computation
     sy_adv_n = tf.placeholder(shape=[None, 1], name="adv", dtype=tf.float32) # advantage function estimate
     sy_h1 = tf.nn.relu(dense(sy_ob_no, 400, "h1", weight_init=normc_initializer(1.0))) # hidden layer
-    sy_h2 = tf.nn.relu(dense(sy_h1, 300, "h2", weight_init=normc_initializer(1.0))) # hidden layer
+    sy_h1 = tf.layers.batch_normalization(sy_h1)
+
+    sy_h2 =  tf.nn.relu(dense(sy_h1, 300, "h2", weight_init=normc_initializer(0.01))) # hidden layer
+    sy_h2 = tf.layers.batch_normalization(sy_h2)
 
     # mean_na = dense(sy_h1, ac_dim, "mean", weight_init=normc_initializer(0.05)) # "logits", describing probability distribution of final layer
     
-    mean_na = tf.tanh(dense(sy_h2, ac_dim, "final",weight_init=normc_initializer(0.1)))*ac_lim # Mean control output
-    # std_a = tf.constant(1.0, dtype=tf.float32, shape=[ac_dim])
+    mean_na = tf.tanh(dense(sy_h2, ac_dim, "final",weight_init=normc_initializer(0.01)))*ac_lim # Mean control output
+    # mean_na = dense(sy_h2, ac_dim, "final",weight_init=normc_initializer(0.01)) # Mean control output
+    # mean_na = tf.sigmoid(dense(sy_h2, ac_dim, "final",weight_init=normc_initializer(0.01)))*ac_lim-ac_lim/2.0 # Mean control output
+
     std_a =  tf.get_variable("logstdev", [ac_dim], initializer=tf.ones_initializer())
 
-    # std_a = tf.constant(1.0,  shape=[ac_dim], dtype=tf.float32)
 
     sy_sampled_ac = sample_gaussian(ac_dim, mean_na, std_a) # sampled actions, used for defining the policy (NOT computing the policy gradient)
-    # sy_sampled_ac = tf.zeros([1, ac_dim])
-    sy_prob_n = (1.0/tf.sqrt((tf.square(std_a)*2*3.1415926))) * tf.exp(-0.5*tf.square((sy_ac_n - mean_na)/std_a))
-    # sy_prob_n = (1.0/(std_a*2.5067)) * tf.exp(-0.5*tf.square((sy_ac_n - mean_na)/std_a))
+    # sy_prob_n = (1.0/tf.sqrt((tf.square(std_a)*2*3.1415926))) * tf.exp(-0.5*tf.square((sy_ac_n - mean_na)/std_a))
+    sy_prob_n = (1.0/(std_a*2.5067)) * tf.exp(-0.5*tf.square((sy_ac_n - mean_na)/std_a))
 
     sy_logprob_n = tf.log(sy_prob_n)
     # sub = tf.subtract(sy_ac_n, mean_na)
@@ -175,13 +187,16 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
 
     sy_stepsize = tf.placeholder(shape=[], dtype=tf.float32) # Symbolic, in case you want to change the stepsize during optimization. (We're not doing that currently)
     update_op = tf.train.AdamOptimizer(sy_stepsize).minimize(sy_surr)
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
 
-    sess = tf.Session()
+    sess = tf.Session(config=config)
     sess.__enter__() # equivalent to `with sess:`
     tf.global_variables_initializer().run() #pylint: disable=E1101
 
     total_timesteps = 0
     stepsize = initial_stepsize
+    plt.ion()
     for i in range(n_iter):
 
         print("********** Iteration %i ************"%i)
@@ -204,16 +219,29 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
                 # mean = sess.run(mean_na, feed_dict={sy_ob_no : ob[None]})[0]
                 ac = sess.run(sy_sampled_ac, feed_dict={sy_ob_no : ob[None]})[0]
                 # print ac
-                ob, done, _ = env.step(ac)
+                # Quad
+                act = [0, 0, ac, 0, 0, 0]
+                ob, done, _ = env.step(act)
                 rew = task.reward(ob, done, _)
+                # rew = np.asarray(0.0)
+                ac = np.asscalar(ac)
+                
+
+                # # Gym
+                # ob, rew, done, _ = env.step(ac)
                 # ac = np.asscalar(ac)
+
                 acs.append(ac)
 
                 rew = np.asscalar(rew)
                 rewards.append(rew)
                 if done:
                     # print "done"
-                    print ob_last[0:3]
+                    # print ob_last[0:3]
+                    states = np.asarray(obs)
+                    # print "states shape: ", states.shape
+                    plt.plot(states[:,2])
+                    plt.pause(0.0001)
                     break       
                 ob_last = np.copy(ob)
              
@@ -229,6 +257,7 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
         for path in paths:
             rew_t = path["reward"]
             return_t = discount(rew_t, gamma)
+
             vpred_t = vf.predict(path["observation"])
             adv_t = return_t - vpred_t
             # print("return_t: ", return_t.shape)
@@ -247,14 +276,14 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
         adv_n = np.concatenate(advs)
         standardized_adv_n = (adv_n - adv_n.mean()) / (adv_n.std() + 1e-8)
         standardized_adv_n = standardized_adv_n.reshape([-1, 1])
-
+        # print standardized_adv_n
         vtarg_n = np.concatenate(vtargs)
         vpred_n = np.concatenate(vpreds)
         vf.fit(ob_no, vtarg_n)
 
         # Policy update
         # print standardized_adv_n
-        surr, adv, logp = sess.run([sy_surr, sy_adv_n, sy_prob_n], feed_dict={sy_ob_no:ob_no, sy_ac_n:ac_n, sy_adv_n:standardized_adv_n, sy_stepsize:stepsize})
+        # surr, adv, logp = sess.run([sy_surr, sy_adv_n, sy_prob_n], feed_dict={sy_ob_no:ob_no, sy_ac_n:ac_n, sy_adv_n:standardized_adv_n, sy_stepsize:stepsize})
         _, old_mean, old_std = sess.run([update_op, mean_na, std_a], feed_dict={sy_ob_no:ob_no, sy_ac_n:ac_n, sy_adv_n:standardized_adv_n, sy_stepsize:stepsize})
         kl, ent = sess.run([sy_kl, sy_ent], feed_dict={sy_ob_no:ob_no, old_mean_na:old_mean, old_std_a:old_std})
 
@@ -283,13 +312,13 @@ def main_pendulum(logdir, seed, n_iter, gamma, min_timesteps_per_batch, initial_
         logz.dump_tabular()
 
 
-def main_pendulum1(d):
-    return main_pendulum(**d)
+def main_quad1(d):
+    return main_quad(**d)
 
 if __name__ == "__main__":
 
-    general_params = dict(gamma=0.97, animate=False, min_timesteps_per_batch=400, n_iter=3000, initial_stepsize=1e-7)
-    main_pendulum(logdir='./quad/', seed=2, desired_kl=2e-3, vf_type='linear', vf_params={}, **general_params)
+    general_params = dict(gamma=0.9, animate=False, min_timesteps_per_batch=2500, n_iter=3000, initial_stepsize=1e-3)
+    main_quad(logdir='./quad/', seed=2, desired_kl=2e-3, vf_type='linear', vf_params={}, **general_params)
 
     # params = [
     #     # dict(logdir='/tmp/ref/linearvf-kl2e-3-seed0', seed=0, desired_kl=2e-3, vf_type='linear', vf_params={}, **general_params),
@@ -301,4 +330,4 @@ if __name__ == "__main__":
     # ]
     # import multiprocessing
     # p = multiprocessing.Pool()
-    # p.map(main_pendulum1, params)
+    # p.map(main_quad1, params)
