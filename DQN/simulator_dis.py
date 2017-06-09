@@ -8,13 +8,15 @@ import numpy as np
 from scipy.integrate import odeint
 
 class QuadCopter(object):
-    def __init__(self, Ts=0.01, max_time = 10, inverted_pendulum=True):
+    def __init__(self, Ts=0.01, max_time = 10, actionLimit = 5.0, action_delta = 0.5, inverted_pendulum=True):
     # simulator  step time
         self.Ts          = Ts
         self.max_time = max_time
-        self.stateSpace  = 16
+        self.stateSpace  = 22
         self.actionSpace = 6
-        self.actionLimit  = 5.0 # maximum rotor speed degree/s TBD
+        self.actionLimit  = actionLimit # maximum rotor speed degree/s TBD
+        self.action_delta  = action_delta # maximum rotor speed degree/s TBD
+
         self.inverted_pendulum = inverted_pendulum
 
     # physical parameters of airframe
@@ -71,7 +73,7 @@ class QuadCopter(object):
         self.p_max     = 10 # max body frame roll rate
         self.q_max     = 10 # max body frame pitch rate
         self.r_max     = 10 # max body frame yaw rate
-        self.uu = np.zeros(6, dtype=np.float32)
+        
 
     # apply initial conditions
         self.reset()
@@ -95,10 +97,12 @@ class QuadCopter(object):
         self.pen_vx = self.pen_vx0
         self.pen_vy = self.pen_vy0
         self.time   = 0.0 # simulation time
+        self.uu = np.zeros(6, dtype=np.float32)
 
         self.states = np.asarray([self.pn, self.pe, self.pd, self.u, self.v, self.w, self.phi, self.theta, self.psi,
                                   self.p,  self.q,  self.r,  self.pen_x,  self.pen_y,  self.pen_vx,  self.pen_vy])
-        return self.states
+        states_out = np.concatenate((self.states, self.uu))
+        return states_out
 
     def force(self, x):
         f = self.k1 * x
@@ -130,19 +134,26 @@ class QuadCopter(object):
         return uu
 
     def action_trans(self, a):
-        delta = 0.2
         if a == 0:
-            self.uu[0] += delta;
+            self.uu[0] += self.action_delta ;
+
         if a == 1:
-            self.uu[0] -= delta;
+            self.uu[0] -= self.action_delta ;
+
         if a == 2:
-            self.uu[1] += delta;
+            self.uu[1] += self.action_delta ;
+
         if a == 3:
-            self.uu[1] -= delta; 
-        if a == 2:
-            self.uu[2] += delta;
-        if a == 3:
-            self.uu[2] -= delta;  
+            self.uu[1] -= self.action_delta ; 
+
+        if a == 4:
+            self.uu[2] += self.action_delta ;
+
+        if a == 5:
+            self.uu[2] -= self.action_delta ;  
+
+        # action limit
+        self.uu = np.clip(self.uu, -self.actionLimit, self.actionLimit)
 
         return self.uu
 
@@ -172,7 +183,9 @@ class QuadCopter(object):
         taup  = uu[3] #tau phi
         taut  = uu[4] #tau theta
         taus  = uu[5] #tau psi
-    
+        
+        # print fx, fy, fz
+
         sp = np.sin(phi)
         cp = np.cos(phi)
         st = np.sin(theta)
@@ -248,6 +261,7 @@ class QuadCopter(object):
         return states_dot
 
     def naive_int(self, derivative_func, states, Ts, uu):
+
         states_dot = derivative_func(states, Ts, uu)
         states += states_dot*Ts
         sol =  np.vstack((states_dot, states))
@@ -259,8 +273,7 @@ class QuadCopter(object):
         self.info = 'normal'
 
         # procecss action to uu
-        action_trans(action)
-        
+        self.action_trans(action)
         # delta   = np.asarray(delta)*3.1416/180
         # delta_f = delta[0]
         # delta_r = delta[1]
@@ -346,9 +359,11 @@ class QuadCopter(object):
         # print 'Time = %f' %self.time
         self.states = np.asarray([self.pn, self.pe, self.pd, self.u, self.v, self.w, self.phi, self.theta, self.psi,
                                   self.p,  self.q,  self.r,  self.pen_x,  self.pen_y,  self.pen_vx,  self.pen_vy])
+        states_out = np.concatenate((self.states, self.uu))
+
         if  self.terminated:
             self.reset()
 
-        return self.states, self.terminated, self.info
+        return states_out, self.terminated, self.info
 
 # end class

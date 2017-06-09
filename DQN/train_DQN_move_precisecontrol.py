@@ -1,21 +1,34 @@
-# This version works on 16*16
-
-import tensorflow as tf
 
 import numpy as np
-import tflearn
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import time
-
+from simulator_dis import QuadCopter
+from util import *
+from quad_task import *
 from replay_buffer import ReplayBuffer
-from simulator_gymstyle_old import *
+
+# import tflearn
+import tensorflow as tf
+import tensorflow.contrib.layers as layers
+
+PLOT = False
 
 # ==========================
 #   Training Parameters
 # ==========================
 
-# Max episode length    
-MAX_EP_STEPS = 100
+# Simulation step
+SIM_TIME_STEP = 0.1
+# Max training steps
+MAX_EPISODES = 500000
+# Max episode length
+MAX_EP_TIME = 5 # second
+MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
+
+# # Explore decay rate
+# EXPLORE_INIT = 0.5
+# EXPLORE_DECAY = 0.999
+# EXPLORE_MIN = 0.01
 
 # Base learning rate for the Qnet Network
 Q_LEARNING_RATE = 1e-4
@@ -26,18 +39,17 @@ GAMMA = 0.9
 TAU = 0.001
 TARGET_UPDATE_STEP = 100
 
-MINIBATCH_SIZE = 1024
-SAVE_STEP = 10000
-EPS_MIN = 0.05
-EPS_DECAY_RATE = 0.99999
+MINIBATCH_SIZE = 64
+SAVE_STEP = 100
+EPS_MIN = 0.01
+EPS_DECAY_RATE = 0.99995
+
 # ===========================
 #   Utility Parameters
 # ===========================
-# map size
-MAP_SIZE  = 8
-PROBABILITY = 0.1
+
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results_dqn_plain/'
+SUMMARY_DIR = './results_dqn_precise_control/'
 RANDOM_SEED = 1234
 # Size of replay buffer
 BUFFER_SIZE = 1000000
@@ -89,25 +101,19 @@ class QNetwork(object):
 
 
     def create_Q_network(self):
-        inputs = tflearn.input_data(shape=self.s_dim)
+        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
 
-        net = tflearn.conv_2d(inputs, 8, 1, activation='relu', name='conv1')
-        net = tflearn.conv_2d(net, 16, 3, activation='relu', name='conv2')
-        # net = tflearn.layers.conv.max_pool_2d (net, 2, strides=None, padding='same', name='MaxPool2D1')
+        net = layers.fully_connected(inputs, num_outputs=256 ,activation_fn=tf.nn.relu)
+        net = tf.layers.batch_normalization(net)
 
-        net = tflearn.conv_2d(net, 8, 3, activation='relu', name='conv3')
-        # net = tflearn.conv_2d(inputs, 8, 3, activation='relu', name='conv3')
+        # net = layers.fully_connected(net, num_outputs=256 ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
 
-        # net = tflearn.conv_2d(net, 16, 3, activation='relu', name='conv2')
-        net = tflearn.fully_connected(net, 64, activation='relu')
-        # net = tflearn.layers.normalization.batch_normalization(net)
-        net = tflearn.fully_connected(net, 32, activation='relu')
+        net = layers.fully_connected(net, num_outputs=128 ,activation_fn=tf.nn.relu)
+        net = tf.layers.batch_normalization(net)
 
-        net = tflearn.fully_connected(net, 16, activation='relu')
-        # linear layer connected to 1 output representing Q(s,a) 
-        # Weights are init to Uniform[-3e-3, 3e-3]
-        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        out = tflearn.fully_connected(net, self.a_dim, activation='tanh')
+        out = layers.fully_connected(net, num_outputs=self.a_dim ,activation_fn=None)
+
         return inputs, out
 
     def train(self, inputs, action, observed_q_value):
@@ -135,12 +141,12 @@ class QNetwork(object):
 #   Tensorflow Summary Ops
 # ===========================
 def build_summaries(): 
-    success_rate = tf.Variable(0.)
-    tf.summary.scalar('Success Rate', success_rate)
+    reward = tf.Variable(0.)
+    tf.summary.scalar('Rewards', reward)
     episode_ave_max_q = tf.Variable(0.)
     tf.summary.scalar('Qmax Value', episode_ave_max_q)
 
-    summary_vars = [success_rate, episode_ave_max_q]
+    summary_vars = [reward, episode_ave_max_q]
     summary_ops = tf.summary.merge_all()
 
     return summary_ops, summary_vars
@@ -148,7 +154,7 @@ def build_summaries():
 # ===========================
 #   Agent Training
 # ===========================
-def train(sess, env, Qnet, global_step):
+def train(sess, env, task, Qnet, global_step):
 
     # Set up summary Ops
     summary_ops, summary_vars = build_summaries()
@@ -181,6 +187,15 @@ def train(sess, env, Qnet, global_step):
     eval_acc_reward = 0
     tic = time.time()
     eps = 1
+
+    # setup plot
+    if PLOT:
+        plt.ion()
+        fig1 = plt.figure()
+        plot1 = fig1.add_subplot(131)
+        plot2 = fig1.add_subplot(132)
+        plot3 = fig1.add_subplot(133)
+
     while True:
         i += 1
         eps = EPS_DECAY_RATE**i
@@ -190,7 +205,7 @@ def train(sess, env, Qnet, global_step):
         # plt.show()
         # s = prepro(s)
         ep_ave_max_q = 0
-
+        states = []
         if i % SAVE_STEP == 0 : # save check point every 1000 episode
             sess.run(global_step.assign(i))
             save_path = saver.save(sess, SUMMARY_DIR + "model.ckpt" , global_step = global_step)
@@ -198,7 +213,7 @@ def train(sess, env, Qnet, global_step):
             print("Successfully saved global step: ", global_step.eval())
 
 
-        for j in xrange(MAX_EP_STEPS):
+        for j in xrange(MAX_EP_STEPS+1):
             predicted_q_value = Qnet.predict(np.reshape(s, np.hstack((1, Qnet.s_dim))))
             predicted_q_value = predicted_q_value[0]
 
@@ -206,14 +221,16 @@ def train(sess, env, Qnet, global_step):
 
             action = np.argmax(predicted_q_value)
             if np.random.rand() < eps:
-                action = np.random.randint(4)
+                action = np.random.randint(env.actionSpace)
                 # print('eps')
             # print'actionprob:', action_prob
 
             # print(action)
             # print(a)
-
-            s2, r, terminal, info = env.step(action)
+            states.append(s)
+            s2, terminal, info = env.step(action)
+            r = task.reward(s2, terminal, info) # calculate reward basec on s2
+            # print s2
             # print r, info
             # plt.imshow(s2, interpolation='none')
             # plt.show()
@@ -225,10 +242,12 @@ def train(sess, env, Qnet, global_step):
             replay_buffer.add(np.reshape(s, (Qnet.s_dim)), np.reshape(action_vector, (Qnet.a_dim)), r, \
                 terminal, np.reshape(s2, (Qnet.s_dim)))
 
-            s = s2
             eval_acc_reward += r
 
             if terminal:
+
+
+                # print info
                 # Keep adding experience to the memory until
                 # there are at least minibatch size samples
                 if replay_buffer.size() > MINIBATCH_SIZE:     
@@ -256,16 +275,26 @@ def train(sess, env, Qnet, global_step):
                     Qnet.update_target_network()
 
                 if i%EVAL_EPISODES == 0:
+                  # plot
+                    if PLOT:
+                        states = np.asarray(states)
+                        plot1.plot(states[:,0])    
+                        plot2.plot(states[:,1])  
+                        plot3.plot(states[:,2])  
+                        plt.pause(0.001)
                     # summary
+
                     time_gap = time.time() - tic
+
                     summary_str = sess.run(summary_ops, feed_dict={
-                        summary_vars[0]: (eval_acc_reward+EVAL_EPISODES)/2,
+                        summary_vars[0]: eval_acc_reward,
                         summary_vars[1]: ep_ave_max_q / float(j+1),
                     })
                     writer.add_summary(summary_str, i)
                     writer.flush()
 
-                    print ('| Success: %i %%' % ((eval_acc_reward+EVAL_EPISODES)/2), "| Episode", i, \
+                    print s[0:3]
+                    print ('| Reward: %i ' % (eval_acc_reward/float(EVAL_EPISODES)), "| Episode", i, \
                         '| Qmax: %.4f' % (ep_ave_max_q / float(j+1)), ' | Time: %.2f' %(time_gap), ' | Eps: %.2f' %(eps))
                     tic = time.time()
 
@@ -273,6 +302,8 @@ def train(sess, env, Qnet, global_step):
                     eval_acc_reward = 0
 
                 break
+
+            s = s2
 
 
 def prepro(state):
@@ -299,22 +330,28 @@ def main(_):
  
         global_step = tf.Variable(0, name='global_step', trainable=False)
 
-        env = sim_env(MAP_SIZE, PROBABILITY) # creat 
-        # np.random.seed(RANDOM_SEED)
-        # tf.set_random_seed(RANDOM_SEED)
+        env  = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, action_delta = 0.1, inverted_pendulum=False)
+        hover_position = np.asarray([0, 10, 10])
+        task = hover(hover_position)
 
-        # state_dim = np.prod(env.observation_space.shape)
-        state_dim = [env.state_dim[0], env.state_dim[1], 1]
-        print('state_dim:',state_dim)
-        action_dim = env.action_dim
-        print('action_dim:',action_dim)
+        state_dim = env.stateSpace
+        action_dim = env.actionSpace
+        action_limit = env.actionLimit        
+        np.random.seed(RANDOM_SEED)
+        tf.set_random_seed(RANDOM_SEED)
 
+        print("Quadcopter created")
+        print('state_dim: ', state_dim)
+        print('action_dim: ', action_dim)
+        print('action_limit: ',action_limit)
+        print('max time: ', MAX_EP_TIME)
+        print('max step: ',MAX_EP_STEPS)   
 
         Qnet = QNetwork(sess, state_dim, action_dim, \
             Q_LEARNING_RATE, TAU)
 
 
-        train(sess, env, Qnet, global_step)
+        train(sess, env, task, Qnet, global_step)
 
 if __name__ == '__main__':
     tf.app.run()

@@ -18,7 +18,7 @@ import tensorflow.contrib.layers as layers
 #   Training Parameters
 # =========================
 # Simulation step
-PLOT = False
+PLOT = True
 
 SIM_TIME_STEP = 0.1
 
