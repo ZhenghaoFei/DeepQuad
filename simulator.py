@@ -18,14 +18,14 @@ class QuadCopter(object):
 
     # physical parameters of airframe
         self.gravity = 9.81
-        self.l       = 45.0/1000  # m, Distance between rotor and center
-        self.pen_l   = 45.0/1000  # m, the length of stick
-        self.k1      = 100.0      # propellers constant
-        self.k2      = 100.0      # propellers constant 
-        self.mass    = 28.0/1000  # mass
-        self.Jx      = 16.60e-6
-        self.Jy      = 16.60e-6
-        self.Jz      = 29.26e-6
+        self.l       = 0.175    # m, Distance between rotor and center
+        self.pen_l   = 0.2      # m, the length of stick
+        self.k1      = 1.0      # propellers constant
+        self.k2      = 2.0      # propellers constant 
+        self.mass    = 0.5      # mass
+        self.Jx      = 2.32e-3
+        self.Jy      = 2.32e-3
+        self.Jz      = 4.00e-3
 
     # initial conditions
         self.pn0    = 0.0  # initial North position
@@ -75,11 +75,11 @@ class QuadCopter(object):
         return self.states
 
     def force(self, x):
-        f = 2.130295e-11*x**2.0 + 1.032633e-6*x + 5.484560e-4
+        f = self.k1*x
         return f 
 
     def torque(self, x):
-        tau = 0.005964552*self.force(x) + 1.563383e-5
+        tau = self.k2*x
         return tau
 
     def trunc_error(self,x):
@@ -213,7 +213,7 @@ class QuadCopter(object):
         terminated = False
         info = 'normal'
 
-        delta   = np.asarray(delta) * 37286.9359183576
+        delta   = np.asarray(delta) * 1.22625
         delta_f = delta[0]
         delta_r = delta[1]
         delta_b = delta[2]
@@ -240,9 +240,10 @@ class QuadCopter(object):
         self.pen_vx = sol[1,14]
         self.pen_vy = sol[1,15]
         self.time   += self.Ts
+        print 'Time = %f' %self.time
 
     # Fail condition check
-        if self.pd0 > 0:
+        if self.pd0 > 1000:
             terminated = True
             info = 'crash'   
             print info         

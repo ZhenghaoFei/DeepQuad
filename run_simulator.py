@@ -46,9 +46,9 @@ def plot_states(states):
 
 def main():
     quad  = QuadCopter()
-    time  = 1 # sec
+    time  = 10.0 # sec
     steps = int(time/quad.Ts)
-    delta  = [2, 2, 0.9, 0.9]
+    delta  = [1.1, 1.0, 1.1, 1.0]
 
     print "Simulate %i sec need total %i steps" %(time, steps)
 
