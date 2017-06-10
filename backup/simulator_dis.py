@@ -8,13 +8,15 @@ import numpy as np
 from scipy.integrate import odeint
 
 class QuadCopter(object):
-    def __init__(self, Ts=0.01, max_time = 10, inverted_pendulum=True):
+    def __init__(self, Ts=0.01, max_time = 10, actionLimit = 5.0, action_delta = 0.5, inverted_pendulum=True):
     # simulator  step time
         self.Ts          = Ts
         self.max_time = max_time
         self.stateSpace  = 22
         self.actionSpace = 6
-        self.actionLimit  = 5.0 # maximum rotor speed degree/s TBD
+        self.actionLimit  = actionLimit # maximum rotor speed degree/s TBD
+        self.action_delta  = action_delta # maximum rotor speed degree/s TBD
+
         self.inverted_pendulum = inverted_pendulum
 
     # physical parameters of airframe
@@ -71,13 +73,14 @@ class QuadCopter(object):
         self.p_max     = 10 # max body frame roll rate
         self.q_max     = 10 # max body frame pitch rate
         self.r_max     = 10 # max body frame yaw rate
-        
+
 
     # apply initial conditions
         self.reset()
 
     def reset(self):
         # print "system reset"
+        self.terminated = False
         self.pn     = self.pn0
         self.pe     = self.pe0
         self.pd     = self.pd0
@@ -132,24 +135,23 @@ class QuadCopter(object):
         return uu
 
     def action_trans(self, a):
-        delta = 0.5
         if a == 0:
-            self.uu[0] += delta;
+            self.uu[0] += self.action_delta ;
 
         if a == 1:
-            self.uu[0] -= delta;
+            self.uu[0] -= self.action_delta ;
 
         if a == 2:
-            self.uu[1] += delta;
+            self.uu[1] += self.action_delta ;
 
         if a == 3:
-            self.uu[1] -= delta; 
+            self.uu[1] -= self.action_delta ; 
 
         if a == 4:
-            self.uu[2] += delta;
+            self.uu[2] += self.action_delta ;
 
         if a == 5:
-            self.uu[2] -= delta;  
+            self.uu[2] -= self.action_delta ;  
 
         # action limit
         self.uu = np.clip(self.uu, -self.actionLimit, self.actionLimit)
@@ -270,7 +272,6 @@ class QuadCopter(object):
     def step(self, action):
         self.terminated = False
         self.info = 'normal'
-
         # procecss action to uu
         self.action_trans(action)
         # delta   = np.asarray(delta)*3.1416/180
@@ -350,6 +351,7 @@ class QuadCopter(object):
         if self.time > self.max_time:
             self.terminated = True
             self.info = 'timeout'   
+            # print self.info
     # # Fail condition check
     #     if self.pd > 0:
     #         self.terminated = True
@@ -360,8 +362,8 @@ class QuadCopter(object):
                                   self.p,  self.q,  self.r,  self.pen_x,  self.pen_y,  self.pen_vx,  self.pen_vy])
         states_out = np.concatenate((self.states, self.uu))
 
-        if  self.terminated:
-            self.reset()
+        # if  self.terminated:
+        #     self.reset()
 
         return states_out, self.terminated, self.info
 
