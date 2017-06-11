@@ -1,36 +1,35 @@
 # This file is aim to train the quadcopter keet at a constant position
 
 import numpy as np
-import tflearn
 import time
-from simulator import QuadCopter
+from simulator_di import QuadCopter
 from replay_buffer import ReplayBuffer
 from  util import *
+from quad_task import *
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
-import sys, os
-
-
+import tflearn
 
 # ==========================
 #   Training Parameters
 # =========================
+PLOT = False
 # Simulation step
-SIM_TIME_STEP = 0.01
+SIM_TIME_STEP = 0.1
 # Max training steps
 MAX_EPISODES = 50000
 # Max episode length
-MAX_EP_TIME = 3 # second
+MAX_EP_TIME = 5 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 # Explore decay rate
-EXPLORE_INIT = 1
-EXPLORE_DECAY = 0.99
-EXPLORE_MIN = 0.1
+EXPLORE_INIT = 0.5
+EXPLORE_DECAY = 0.999
+EXPLORE_MIN = 0.01
 
 # Base learning rate for the Actor network
-ACTOR_LEARNING_RATE = 1e-4
+ACTOR_LEARNING_RATE = 1e-5
 # Base learning rate for the Critic Network
-CRITIC_LEARNING_RATE = 1e-3
+CRITIC_LEARNING_RATE = 1e-4
 # Discount factor 
 GAMMA = 0.99
 # Soft target update param
@@ -41,8 +40,8 @@ TAU = 0.001
 # ===========================
 
 # Directory for storing tensorboard summary results
-SUMMARY_DIR = './results/horizontal/'
-SAVE_STEP = 10
+SUMMARY_DIR = './results/ddpg/'
+SAVE_STEP = 50
 
 RANDOM_SEED = 1234
 # Size of replay buffer
@@ -95,29 +94,36 @@ class ActorNetwork(object):
         self.num_trainable_vars = len(self.network_params) + len(self.target_network_params)
 
     def create_actor_network(self): 
-        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
-        net = tf.layers.batch_normalization(inputs)
-        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim], name='state')
+        # net = tf.layers.batch_normalization(inputs)
+        # net = layers.fully_connected(inputs, num_outputs=400 ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+
+        # net = layers.fully_connected(net, num_outputs=300 ,activation_fn=tf.nn.relu)
+        # net = tf.layers.batch_normalization(net)
+        # # net = layers.fully_connected(net, num_outputs=300 ,activation_fn=tf.th)
+        # out_w = tf.Variable(np.random.randn(300, self.a_dim)*3e-3, dtype=tf.float32, name="out_w")
+        # out_b = tf.Variable(tf.zeros([self.a_dim]), dtype=tf.float32, name="out_b")
+        # out = tf.tanh(tf.matmul(net, out_w) + out_b)
+        # scaled_out = tf.multiply(out, self.action_limit)# Scale output to -action_limit to action_limit
+
+        # tflearn version
+        inputs = tflearn.input_data(shape=[None, self.s_dim])
+        net = tflearn.fully_connected(inputs, 400, activation='relu')
         net = tf.layers.batch_normalization(net)
 
-        net = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
+        net = tflearn.fully_connected(net, 300, activation='relu')
         net = tf.layers.batch_normalization(net)
-        # net = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.th)
-        out_w = tf.Variable(np.random.randn(300, self.a_dim)*3e-3, dtype=tf.float32, name="out_w")
-        out_b = tf.Variable(tf.zeros([self.a_dim]), dtype=tf.float32, name="out_b")
-        out = tf.tanh(tf.matmul(net, out_w) +out_b)
-        scaled_out = tf.multiply(out, self.action_limit)# Scale output to -action_limit to action_limit
 
-        ## tflearn version
-        # inputs = tflearn.input_data(shape=[None, self.s_dim])
-        # net = tflearn.fully_connected(inputs, 400, activation='relu')
-        # net = tflearn.fully_connected(net, 300, activation='relu')
-        # # Final layer weights are init to Uniform[-3e-3, 3e-3]
-        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        # out = tflearn.fully_connected(
-        #     net, self.a_dim, activation='tanh', weights_init=w_init)
-        # # Scale output to -action_bound to action_bound
-        # scaled_out = tf.multiply(out, self.action_limit)
+        net = tflearn.fully_connected(net, 300, activation='relu')
+        net = tf.layers.batch_normalization(net)
+
+        # Final layer weights are init to Uniform[-3e-3, 3e-3]
+        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
+        out = tflearn.fully_connected(
+            net, self.a_dim, activation='sigmoid', weights_init=w_init)
+        # Scale output to -action_bound to action_bound
+        scaled_out = tf.multiply(out, self.action_limit*2) - self.action_limit
 
 
         return inputs, out, scaled_out 
@@ -185,42 +191,44 @@ class CriticNetwork(object):
         self.action_grads = tf.gradients(self.out, self.action)
 
     def create_critic_network(self):
-        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
-        action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
+        # inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.s_dim])
+        # action = tf.placeholder(dtype=tf.float32, shape=[None, self.a_dim])
 
-        net = layers.fully_connected(inputs, num_outputs=400, weights_initializer=layers.xavier_initializer() ,activation_fn=tf.nn.relu)
-        # Add the action tensor in the 2nd hidden layer
-        # Use two temp layers to get the corresponding weights and biases 
-        t1 = layers.fully_connected(net, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
-        t2 = layers.fully_connected(action, num_outputs=300, weights_initializer=layers.xavier_initializer(), activation_fn=None)
+        # net = layers.fully_connected(inputs, num_outputs=400 ,activation_fn=tf.nn.relu)
+        # # Add the action tensor in the 2nd hidden layer
+        # # Use two temp layers to get the corresponding weights and biases 
+        # t1 = layers.fully_connected(net, num_outputs=300, activation_fn=None)
+        # t2 = layers.fully_connected(action, num_outputs=300, activation_fn=None)
 
-        net = tf.nn.relu(t1 + t2)
-        net = tf.layers.batch_normalization(net)
-        out_w = tf.Variable(np.random.randn(300, 1)*3e-3, dtype=tf.float32)
-        out_b = tf.Variable(tf.zeros([1]), dtype=tf.float32, name="out_b")
+        # net = tf.nn.relu(t1 + t2)
+        # net = tf.layers.batch_normalization(net)
+        # out_w = tf.Variable(np.random.randn(300, 1)*3e-3, dtype=tf.float32)
+        # out_b = tf.Variable(tf.zeros([1]), dtype=tf.float32, name="out_b")
 
-        net = tf.matmul(net, out_w) + out_b
-        net = tf.layers.batch_normalization(net)
+        # out = tf.matmul(net, out_w) + out_b
 
-        out = layers.fully_connected(net, num_outputs=1, weights_initializer=layers.xavier_initializer(), activation_fn=None)
 
         # tflearn version
-        # inputs = tflearn.input_data(shape=[None, self.s_dim])
-        # action = tflearn.input_data(shape=[None, self.a_dim])
-        # net = tflearn.fully_connected(inputs, 400, activation='relu')
+        inputs = tflearn.input_data(shape=[None, self.s_dim])
+        action = tflearn.input_data(shape=[None, self.a_dim])
+        net = tflearn.fully_connected(inputs, 400, activation='relu')
+        net = tf.layers.batch_normalization(net)
+        net = tflearn.fully_connected(net, 300, activation='relu')
+        net = tf.layers.batch_normalization(net)
 
         # Add the action tensor in the 2nd hidden layer
         # Use two temp layers to get the corresponding weights and biases
-        # t1 = tflearn.fully_connected(net, 300)
-        # t2 = tflearn.fully_connected(action, 300)
+        t1 = tflearn.fully_connected(net, 300)
+        t2 = tflearn.fully_connected(action, 300)
 
-        # net = tflearn.activation(
-        #     tf.matmul(net, t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
+        net = tflearn.activation(
+            tf.matmul(net, t1.W) + tf.matmul(action, t2.W) + t2.b, activation='relu')
+        net = tf.layers.batch_normalization(net)
 
-        # # linear layer connected to 1 output representing Q(s,a)
-        # # Weights are init to Uniform[-3e-3, 3e-3]
-        # w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
-        # out = tflearn.fully_connected(net, 1, weights_init=w_init)
+        # linear layer connected to 1 output representing Q(s,a)
+        # Weights are init to Uniform[-3e-3, 3e-3]
+        w_init = tflearn.initializations.uniform(minval=-0.003, maxval=0.003)
+        out = tflearn.fully_connected(net, 1, weights_init=w_init)
         return inputs, action, out
 
     def train(self, inputs, action, predicted_q_value):
@@ -256,7 +264,7 @@ class CriticNetwork(object):
 # ===========================
 def build_summaries(): 
     success_rate = tf.Variable(0.)
-    tf.summary.scalar("Success Rate", success_rate)
+    tf.summary.scalar("Reward ", success_rate)
     episode_ave_max_q = tf.Variable(0.)
     tf.summary.scalar("Qmax Value", episode_ave_max_q)
 
@@ -276,35 +284,14 @@ def count_parameters():
         total_parameters += variable_parametes
     print("total_parameters:", total_parameters)
 
-# ===========================
-#   Reward functions
-# ===========================
-def reward_function_hover_decorator(hover_position_set):
 
-    def reward_function_hover(states, terminal, info):
-        # this function is aimed to let the quadcopter hover in a certain position.
-        # e.g
-        # hover_position = np.asarray([0, 0, 0]) # pn = 0, pe = 0, pd = 0
-
-        if terminal:
-            reward = -500
-            print "terminated " , info
-        else:
-            current_position = states[0:3]
-            # reward function = -MSE(current_position, hover_position)
-            reward = -np.mean((current_position - hover_position_set)**2) + 200
-            # print reward
-
-        return reward
-
-    return reward_function_hover
 
 # ===========================
 #   Agent Training
 # ===========================
 
 
-def train(sess, env, actor, critic, reward_fc):
+def train(sess, env, actor, critic, task):
 
     # Set up summary Ops
     summary_ops, summary_vars = build_summaries()
@@ -316,7 +303,7 @@ def train(sess, env, actor, critic, reward_fc):
     # load model if have
     saver = tf.train.Saver()
     checkpoint = tf.train.get_checkpoint_state(SUMMARY_DIR)
-    
+
     if checkpoint and checkpoint.model_checkpoint_path:
         saver.restore(sess, checkpoint.model_checkpoint_path)
         print ("Successfully loaded:", checkpoint.model_checkpoint_path)
@@ -336,6 +323,14 @@ def train(sess, env, actor, critic, reward_fc):
     last_epreward = 0 
     i = global_step.eval()
 
+    # plot
+    if PLOT:
+        plt.ion()
+        fig1 = plt.figure()
+        plot1 = fig1.add_subplot(121)
+        plot2 = fig1.add_subplot(122)
+
+
     while True:
         i += 1
         if i > MAX_EPISODES:
@@ -348,25 +343,39 @@ def train(sess, env, actor, critic, reward_fc):
 
         ep_reward = 0
         ep_ave_max_q = 0
-        states = np.zeros([MAX_EP_STEPS, env.stateSpace])
+        states = np.zeros([MAX_EP_STEPS+1, env.stateSpace])
+        actions = np.zeros([MAX_EP_STEPS+1, env.actionSpace])
 
         if i % SAVE_STEP == 0: # save check point every xx episode
-            sess.run(global_step.assign(i))
+            # sess.run(global_step.assign(i))
             save_path = saver.save(sess, SUMMARY_DIR + "model.ckpt" , global_step = i)
             print("Model saved in file: %s" % save_path)
 
-        for j in xrange(MAX_EP_STEPS):
+        for j in xrange(MAX_EP_STEPS+1):
 
             # Added exploration noise
-            exp = np.random.rand() * explore * env.actionLimit
-            a = actor.predict(np.reshape(s, (1, 16))) + exp
+            # exp = np.random.rand(1, 4) * explore * env.actionLimit
+            exp = np.random.rand(1, actor.a_dim) * explore * env.actionLimit*2 - explore * env.actionLimit 
+            # print "exp: ", exp
+            
+            a = actor.predict(np.reshape(s, (1, 16)))
+            # print "raw a: ", a
+            a += exp
+            # print "a: ", a
+            act = np.reshape(a, (actor.a_dim,))
+            # print act.shape
+            act = [act[0], act[1], act[2], 0, 0, 0]
+            # print act
             # a = actor.predict(np.reshape(s, (1, 16))) + (1. / (1. + i))
-
-            s2, terminal, info = env.step(a[0])
+            s2, terminal, info = env.step(act)
+            # print 's', s
+            # print 's2', s2
+            # print j
+            # print "action: ", a[0]
+            # print "state: ", s2
             states[j] = s2
-
-            r = reward_fc(s2, terminal, info) # calculate reward basec on s2
-
+            actions[j] = act
+            r = task.reward(s2, terminal, info) # calculate reward basec on s2
             replay_buffer.add(np.reshape(s, (actor.s_dim,)), np.reshape(a, (actor.a_dim,)), r, \
                 terminal, np.reshape(s2, (actor.s_dim,)))
 
@@ -400,43 +409,43 @@ def train(sess, env, actor, critic, reward_fc):
                 actor.update_target_network()
                 critic.update_target_network()
 
-            s = s2
             ep_reward += r
-
-            if terminal or j == MAX_EP_STEPS-1 or r < -10000:
+            if terminal:
                 # if i > 30:
                 #     plot_states(states)
+                if PLOT:
+                    plot1.plot(states[:,2])    
+                    plot2.plot(states[:,5])  
+                    plt.pause(0.001)
 
                 print s[0:3]
                 time_gap = time.time() - tic
 
-                # summary_str = sess.run(summary_ops, feed_dict={
-                #     summary_vars[0]: ep_reward,
-                #     summary_vars[1]: ep_ave_max_q / float(j)
-                # })
+                summary_str = sess.run(summary_ops, feed_dict={
+                    summary_vars[0]: (ep_reward/(j+1)),
+                    summary_vars[1]: (ep_ave_max_q / float(j+1)),
+                })
 
-                # writer.add_summary(summary_str, i)
-                # writer.flush()
-                # if ep_reward < last_epreward and last_epreward != 0:
-                #     actor.learning_rate /= 10
-                #     critic.learning_rate /= 10
-                #     print "lr decay to ", actor.learning_rate
-                last_epreward = ep_reward
-                print '| Reward: %.2f' % int(ep_reward/(j+1)), " | Episode", i, \
+                writer.add_summary(summary_str, i)
+                writer.flush()
+
+                print '| Reward: %.2f' % (ep_reward/(j+1)), " | Episode", i, \
                         '| Qmax: %.4f' % (ep_ave_max_q / float(j+1)), ' | Time: %.2f' %(time_gap)
                 tic = time.time()
 
                 break
+            s = np.copy(s2)
 
 
 def main(_):
         
         np.random.seed(RANDOM_SEED)
         tf.set_random_seed(RANDOM_SEED)
-        env  = QuadCopter(SIM_TIME_STEP, inverted_pendulum=False)
+        env  = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, inverted_pendulum=False)
 
         state_dim = env.stateSpace
-        action_dim = env.actionSpace
+        # action_dim = env.actionSpace
+        action_dim = 3
         action_limit = env.actionLimit
 
         print("Quadcopter created")
@@ -446,8 +455,8 @@ def main(_):
         print('max time: ', MAX_EP_TIME)
         print('max step: ',MAX_EP_STEPS)        
 
-        hover_position = np.asarray([10, 10, 0])
-        reward_fc = reward_function_hover_decorator(hover_position)
+        hover_position = np.asarray([20, 10, -10])
+        task = hover(hover_position)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
 
@@ -458,7 +467,7 @@ def main(_):
             critic = CriticNetwork(sess, state_dim, action_dim, \
                 CRITIC_LEARNING_RATE, TAU, actor.get_num_trainable_vars())
 
-            train(sess, env, actor, critic, reward_fc)
+            train(sess, env, actor, critic, task)
 
 if __name__ == '__main__':
     tf.app.run()

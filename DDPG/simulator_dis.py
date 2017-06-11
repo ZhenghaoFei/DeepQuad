@@ -8,29 +8,43 @@ import numpy as np
 from scipy.integrate import odeint
 
 class QuadCopter(object):
-    def __init__(self, Ts=0.01, inverted_pendulum=True):
+    def __init__(self, Ts=0.01, max_time = 10, inverted_pendulum=True):
     # simulator  step time
         self.Ts          = Ts
+        self.max_time = max_time
         self.stateSpace  = 16
-        self.actionSpace = 4
-        self.actionLimit  = 2 # maximum rotor speed degree/s TBD
+        self.actionSpace = 6
+        self.actionLimit  = 5.0 # maximum rotor speed degree/s TBD
         self.inverted_pendulum = inverted_pendulum
 
     # physical parameters of airframe
+        # self.gravity = 9.81
+        # self.l       = 0.175  # m, Distance between rotor and center
+        # self.pen_l   = 0.20  # m, the length of stick
+        # self.k1      = 1.0      # propellers constant
+        # self.k2      = 2.0      # propellers constant 
+        # self.mass    = 0.5  # mass
+        # self.Jx      = 2.32e-3
+        # self.Jy      = 2.32e-3
+        # self.Jz      = 4.00e-3
+
         self.gravity = 9.81
-        self.l       = 0.175    # m, Distance between rotor and center
-        self.pen_l   = 0.2      # m, the length of stick
-        self.k1      = 1.0      # propellers constant
-        self.k2      = 2.0      # propellers constant 
-        self.mass    = 0.5      # mass
-        self.Jx      = 2.32e-3
-        self.Jy      = 2.32e-3
-        self.Jz      = 4.00e-3
+        self.l = 0.2; # m, Distance between rotor and center
+        self.pen_l   = 0.20  # m, the length of stick
+        self.k1 = 100; # propellers constant
+        self.k2 = 100; # propellers constant 
+        self.R = 0.04; # m, Center mass radius 
+        self.M = 1 # kg, Body weight
+        self.m = 0.07 #kg, Rotor weight 
+        self.mass = self.M + self.m;
+        self.Jx   = 2*self.M*self.R**2/5 + 2*self.l*self.m;
+        self.Jy   = 2*self.M*self.R**2/5 + 2*self.l*self.m;
+        self.Jz   = 2*self.M*self.R**2/5 + 4*self.l*self.m;
 
     # initial conditions
         self.pn0    = 0.0  # initial North position
         self.pe0    = 0.0  # initial East position
-        self.pd0    = -10.0  # initial Down position (negative altitude)
+        self.pd0    = 0.0  # initial Down position (negative altitude)
         self.u0     = 0.0  # initial velocity along body x-axis
         self.v0     = 0.0  # initial velocity along body y-axis
         self.w0     = 0.0  # initial velocity along body z-axis
@@ -46,6 +60,18 @@ class QuadCopter(object):
         self.pen_y0    = 0.0 # initial displacement along jv in vehicle frame
         self.pen_vx0   = 0.0 # initial velocity along iv in vehicle frame
         self.pen_vy0   = 0.0 # initial velocity along jv in vehicle frame
+
+    # maximum conditions
+        self.pn_max    =  100  # max North position
+        self.pe_max    =  100  # max East position
+        self.pd_max    =  100  # max Down position (negative altitude)
+        self.u_max     = 10 # max velocity along body x-axis
+        self.v_max     = 10 # max velocity along body y-axis
+        self.w_max     = 10 # max velocity along body z-axis
+        self.p_max     = 10 # max body frame roll rate
+        self.q_max     = 10 # max body frame pitch rate
+        self.r_max     = 10 # max body frame yaw rate
+        self.uu = np.zeros(6, dtype=np.float32)
 
     # apply initial conditions
         self.reset()
@@ -75,11 +101,11 @@ class QuadCopter(object):
         return self.states
 
     def force(self, x):
-        f = self.k1*x
+        f = self.k1 * x
         return f 
 
     def torque(self, x):
-        tau = self.k2*x
+        tau = self.k2 * x
         return tau
 
     def trunc_error(self,x):
@@ -100,11 +126,27 @@ class QuadCopter(object):
 
         uu = np.asarray([self.trunc_error(Force_x), self.trunc_error(Force_y), self.trunc_error(Force_z),
                          self.trunc_error(Torque_x), self.trunc_error(Torque_y), self.trunc_error(Torque_z)])
-        # print uu
+
         return uu
 
+    def action_trans(self, a):
+        delta = 0.2
+        if a == 0:
+            self.uu[0] += delta;
+        if a == 1:
+            self.uu[0] -= delta;
+        if a == 2:
+            self.uu[1] += delta;
+        if a == 3:
+            self.uu[1] -= delta; 
+        if a == 2:
+            self.uu[2] += delta;
+        if a == 3:
+            self.uu[2] -= delta;  
 
-    def Derivative(self, states, t, delta_f, delta_r, delta_b, delta_l):
+        return self.uu
+
+    def Derivative(self, states, t, uu):
     # state variables
         pn     = states[0]    
         pe     = states[1]    
@@ -123,7 +165,7 @@ class QuadCopter(object):
         pen_vx = states[14] 
         pen_vy = states[15] 
     # control inputs
-        uu    = self.forces_moments(delta_f, delta_r, delta_b, delta_l, theta, phi)
+        # uu    = self.forces_moments(delta_f, delta_r, delta_b, delta_l, theta, phi)
         fx    = uu[0]
         fy    = uu[1]
         fz    = uu[2]
@@ -178,6 +220,9 @@ class QuadCopter(object):
      # inverted pendulum dynamics
         if self.inverted_pendulum: 
             pen_zeta  = np.sqrt(self.pen_l**2.0 - pen_x**2.0 - pen_y**2.0)
+            if pen_zeta <=0:
+                self.terminated = True
+                self.info = "pen_zeta<0"
             pen_xdot  = pen_vx
             pen_ydot  = pen_vy
             pen_alpha = (-pen_zeta**2.0/(pen_zeta**2.0+pen_x**2.0)) * (xddot+(pen_xdot**2.0*pen_x+pen_ydot**2.0*pen_x)/(pen_zeta**2.0) \
@@ -187,8 +232,8 @@ class QuadCopter(object):
                       + (pen_ydot**2.0*pen_y**3.0+2*pen_ydot*pen_xdot*pen_y**2.0*pen_x+pen_xdot**2.0*pen_x**2.0*pen_y)/(pen_zeta**4.0) \
                       - (pen_y*(zddot+self.gravity))/(pen_zeta))
             pen_vxdot = (pen_alpha - pen_beta*pen_x*pen_y/((self.pen_l**2.0-pen_y**2.0)*pen_zeta**2.0)) \
-                      * (1 - (pen_x**2.0*pen_y**2.0)/((self.pen_l**2.0-pen_y**2.0)**2.0*pen_zeta**4.0))
-            pen_vydot = pen_beta - (pen_vxdot*pen_x*pen_y)/(self.pen_l**2.0-pen_x**2.0)
+                      * (1.0 - (pen_x**2.0*pen_y**2.0)/((self.pen_l**2.0-pen_y**2.0)**2.0*pen_zeta**4.0))
+            pen_vydot = pen_beta - (pen_vxdot*pen_x*pen_y)/((self.pen_l**2.0-pen_x**2.0)*pen_zeta**2.0)
         else:
             pen_zeta  = 0
             pen_xdot  = 0
@@ -202,26 +247,29 @@ class QuadCopter(object):
                                  pen_xdot,  pen_ydot,   pen_vxdot,  pen_vydot])
         return states_dot
 
-    def naive_int(self, derivative_func, states, Ts, args):
-        states_dot = derivative_func(states, Ts, args[0], args[1], args[2], args[3])
+    def naive_int(self, derivative_func, states, Ts, uu):
+        states_dot = derivative_func(states, Ts, uu)
         states += states_dot*Ts
         sol =  np.vstack((states_dot, states))
         return sol
 
 
-    def step(self, delta):
-        terminated = False
-        info = 'normal'
+    def step(self, action):
+        self.terminated = False
+        self.info = 'normal'
 
-        delta   = np.asarray(delta) * 1.22625
-        delta_f = delta[0]
-        delta_r = delta[1]
-        delta_b = delta[2]
-        delta_l = delta[3]
+        # procecss action to uu
+        action_trans(action)
+        
+        # delta   = np.asarray(delta)*3.1416/180
+        # delta_f = delta[0]
+        # delta_r = delta[1]
+        # delta_b = delta[2]
+        # delta_l = delta[3]
 
     # integral, ode
-        sol = odeint(self.Derivative, self.states, [self.time, self.time+self.Ts], args=(delta_f,delta_r,delta_b,delta_l), full_output=False, printmessg=False)
-        # sol = self.naive_int(self.Derivative, self.states, self.Ts, [delta_f,delta_r,delta_b,delta_l])
+        # sol = odeint(self.Derivative, self.states, [self.time, self.time+self.Ts], args=(delta_f,delta_r,delta_b,delta_l), full_output=False, printmessg=False)
+        sol = self.naive_int(self.Derivative, self.states, self.Ts, self.uu)
 
         self.pn     = sol[1,0] 
         self.pe     = sol[1,1] 
@@ -240,20 +288,67 @@ class QuadCopter(object):
         self.pen_vx = sol[1,14]
         self.pen_vy = sol[1,15]
         self.time   += self.Ts
-        print 'Time = %f' %self.time
 
-    # Fail condition check
-        if self.pd0 > 1000:
-            terminated = True
-            info = 'crash'   
-            print info         
+        # check boundry condition
+        if self.pn > self.pn_max:
+            self.pn = self.pn_max
+        if self.pn < -self.pn_max:
+            self.pn = -self.pn_max
+
+        if self.pe > self.pe_max:
+            self.pe = self.pe_max
+        if self.pe < -self.pe_max:
+            self.pe = -self.pe_max
+
+        if self.pd > self.pd_max:
+            self.pd = self.pd_max
+        if self.pd < -self.pd_max:
+            self.pd = -self.pd_max
+
+        if self.u > self.u_max:
+            self.u = self.u_max
+        if self.u < -self.u_max:
+            self.u = -self.u_max
+
+        if self.v > self.v_max:
+            self.v = self.v_max
+        if self.v < -self.v_max:
+            self.v = -self.v_max
+
+        if self.w > self.w_max:
+            self.w = self.w_max
+        if self.w < -self.w_max:
+            self.w = -self.w_max
+
+        if self.p > self.p_max:
+            self.p = self.p_max
+        if self.p < -self.p_max:
+            self.p = -self.p_max
+
+        if self.q > self.q_max:
+            self.q = self.q_max
+        if self.q < -self.q_max:
+            self.q = -self.q_max
+
+        if self.r > self.r_max:
+            self.r = self.r_max
+        if self.r < -self.r_max:
+            self.r = -self.r_max
+
+        if self.time > self.max_time:
+            self.terminated = True
+            self.info = 'timeout'   
+    # # Fail condition check
+    #     if self.pd > 0:
+    #         self.terminated = True
+    #         self.info = 'crash'   
 
         # print 'Time = %f' %self.time
         self.states = np.asarray([self.pn, self.pe, self.pd, self.u, self.v, self.w, self.phi, self.theta, self.psi,
                                   self.p,  self.q,  self.r,  self.pen_x,  self.pen_y,  self.pen_vx,  self.pen_vy])
-        if  terminated:
+        if  self.terminated:
             self.reset()
 
-        return self.states, terminated, info
+        return self.states, self.terminated, self.info
 
 # end class

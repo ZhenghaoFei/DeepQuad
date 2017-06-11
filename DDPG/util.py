@@ -36,5 +36,5 @@ def plot_states(states):
     axes[4, 2].plot(states[:,14])
     axes[4, 2].set_title('pen_vx')
     fig.subplots_adjust(hspace=1.4) 
-    plt.show()
+    # plt.show()
 
