@@ -1,6 +1,5 @@
-#!/usr/bin/python2.7 
+#!/usr/bin/python2.7
 # Filename: simulator.py
-# new dynamics
 # Description: This is the simulator of quadcopter with an inverted pendulum on it
 # Auther: Peng Wei, Zhenghao Fei
 
@@ -218,7 +217,7 @@ class QuadCopter(object):
                                     [ct*ss, sp*st*ss+cp*cs, cp*st*ss-sp*cs],
                                     [-st,   sp*ct,          cp*ct]])
                                    
-        position_dot = np.mat([0,0,self.gravity]).T + 1.0/self.mass * rotation_position * np.mat([0,0,fz-self.mass*self.gravity*ct*cp]).T
+        position_dot = rotation_position * np.mat([u,v,w]).T
         pndot = position_dot[0,0]
         pedot = position_dot[1,0]
         pddot = position_dot[2,0]

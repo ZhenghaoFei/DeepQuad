@@ -12,7 +12,7 @@ class hover(object):
         # hover_position = np.asarray([0, 0, 0]) # pn = 0, pe = 0, pd = 0
         if terminal and info!='time_out':
             print info
-            reward = -0
+            reward = -1000
             return reward
 
         current_position = states[0:3]

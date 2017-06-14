@@ -31,7 +31,7 @@ SIM_TIME_STEP = 0.1
 SAVE_STEP = 1
 
 # Max episode length
-MAX_EP_TIME = 15 # second
+MAX_EP_TIME = 5 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 
 
@@ -180,7 +180,7 @@ class Worker():
         
         self.actions = self.actions = np.identity(a_size,dtype=bool).tolist()
         #End Doom set-up
-        self.env = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, inverted_pendulum=False)
+        self.env = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, inverted_pendulum=True)
         
     def train(self,rollout,sess,gamma,bootstrap_value):
         rollout = np.array(rollout)
@@ -288,6 +288,7 @@ class Worker():
                     # plot
                     if PLOT:
                         states = np.asarray(episode_states)
+                        save_states(states, SIM_TIME_STEP)
                         plot_states(states)
                         # plot1.plot(states[:,0])    
                         # plot2.plot(states[:,1])  
@@ -314,7 +315,7 @@ class Worker():
 
 # In[ ]:
 
-env  = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, inverted_pendulum=False)
+env  = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, inverted_pendulum=True)
 
 state_dim = env.stateSpace
 action_dim = env.actionSpace

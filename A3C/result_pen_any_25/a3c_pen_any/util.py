@@ -23,14 +23,45 @@ def plot_states(states):
         ax.set_title(states_label[i+6])
         fig.subplots_adjust(hspace=0.4)    
 
+
     # 'in1', 'in2', 'in3', 'in4'
     fig = plt.figure(3)
     for i in range(4):
         ax = plt.subplot(2,2,i+1)
         ax.plot(states[:, i+16])
         ax.set_title(states_label[i+16])
+        fig.subplots_adjust(hspace=0.4) 
+
+    # 'pen_x', 'pen_y'
+    fig = plt.figure(4)
+    for i in range(2):
+        ax = plt.subplot(1,2,i+1)
+        ax.plot(states[:, i+12])
+        ax.set_title(states_label[i+12])
         fig.subplots_adjust(hspace=0.4)  
 
-
     plt.show()
+
+def save_states(states, Ts):
+    filename = "./state.csv"
+    length = states.shape[0]
+    time = np.array([Ts * i for i in range(length)])
+    time = np.expand_dims(time, axis=1)
+    states = np.concatenate((states, time), axis=1)
+    np.savetxt(filename, states, delimiter=',')
+    print "states saved at: ", filename
+    print "states shape: ", states.shape
+
+
+
+
+
+
+
+
+
+
+
+
+
 

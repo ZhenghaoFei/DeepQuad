@@ -1,9 +1,7 @@
 
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
 import threading
 import multiprocessing
-# import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 import scipy.signal
 # get_ipython().magic(u'matplotlib inline')
@@ -19,7 +17,8 @@ from time import sleep
 from time import time
 import numpy as np
 
-
+import tensorflow as tf
+import tensorflow.contrib.slim as slim
 
 # ==========================
 #   Training Parameters
@@ -27,7 +26,7 @@ import numpy as np
 # Simulation step
 SIM_TIME_STEP = 0.1
 SAVE_STEP = 100
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-4
 # Max episode length
 MAX_EP_TIME = 5 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
@@ -51,12 +50,6 @@ def update_target_graph(from_scope,to_scope):
         op_holder.append(to_var.assign(from_var))
     return op_holder
 
-# # Processes Doom screen image to produce cropped and resized image. 
-# def process_frame(frame):
-#     s = frame[10:-10,30:-30]
-#     s = scipy.misc.imresize(s,[84,84])
-#     s = np.reshape(s,[np.prod(s.shape)]) / 255.0
-#     return s
 
 # Discounting function used to calculate discounted returns.
 def discount(x, gamma):
@@ -80,7 +73,7 @@ def sample_gaussian(mean, std):
 
 # ### Actor-Critic Network
 
-# In[ ]:
+
 class AC_Network():
     def __init__(self,s_size,a_size,scope,trainer):
         with tf.variable_scope(scope):
@@ -123,6 +116,8 @@ class AC_Network():
                 activation_fn=tf.nn.softmax,
                 weights_initializer=normalized_columns_initializer(0.01),
                 biases_initializer=None)
+
+            # self.policy = tf.nn.softmax(tf.clip_by_value(self.policy ,1e-10,1.0))
             self.value = slim.fully_connected(rnn_out,1,
                 activation_fn=None,
                 weights_initializer=normalized_columns_initializer(1.0),
@@ -139,7 +134,7 @@ class AC_Network():
 
                 #Loss functions
                 self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value,[-1])))
-                self.entropy = - tf.reduce_sum(self.policy * tf.log(self.policy))
+                self.entropy = - tf.reduce_sum(self.policy * tf.log(tf.clip_by_value(self.policy ,1e-10,1.0)))
                 self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs)*self.advantages)
                 self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy * 0.01
 
@@ -155,7 +150,7 @@ class AC_Network():
 
 # ### Worker Agent
 
-# In[ ]:
+
 
 class Worker():
     def __init__(self,name,s_size,a_size,trainer,model_path,global_episodes):
@@ -244,6 +239,7 @@ class Worker():
 
                     # print "a_dist[]: ", a_dist[0]
                     a_dist[0] = np.abs(a_dist[0])
+                    # a_clip = np.clip(a_dist[0], 1e-10, 1.0)
                     a = np.random.choice(self.a_size, p=a_dist[0])
                     
                     # a = np.argmax(a_dist == a)
@@ -325,15 +321,15 @@ class Worker():
                 episode_count += 1
 
 
-# In[ ]:
+
 
 env  = QuadCopter(SIM_TIME_STEP, max_time = MAX_EP_TIME, inverted_pendulum=False)
 
 state_dim = env.stateSpace
 action_dim = env.actionSpace
 action_limit = env.actionLimit
-hover_position = np.asarray([0, 5, 5])
-task = hover(hover_position)
+hover_position = np.asarray([0, 0, 0])
+task = hover2(hover_position)
 
 print("Quadcopter created")
 print('state_dim: ', state_dim)
@@ -343,7 +339,7 @@ print('max time: ', MAX_EP_TIME)
 print('max step: ',MAX_EP_STEPS)     
 print("hover_position: ", hover_position)
 print("learning rate: ", LEARNING_RATE)
-# In[ ]:
+
 
 tf.reset_default_graph()
 

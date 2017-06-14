@@ -1,42 +1,45 @@
 
-
+import tensorflow as tf
+import tensorflow.contrib.slim as slim
 import threading
 import multiprocessing
-import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 import scipy.signal
 # get_ipython().magic(u'matplotlib inline')
 # from helper import *
 # from vizdoom import *
 import os
-from simulator_dis import *
+from simulator_rotor_input import *
 from  util import *
 from quad_task import *
 
 from random import choice
 from time import sleep
 from time import time
+import numpy as np
 
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
+
 
 # ==========================
 #   Training Parameters
 # =========================
+PLOT = True
+
 # Simulation step
 SIM_TIME_STEP = 0.1
-SAVE_STEP = 100
+SAVE_STEP = 1
 
 # Max episode length
-MAX_EP_TIME = 5 # second
+MAX_EP_TIME = 15 # second
 MAX_EP_STEPS = int(MAX_EP_TIME/SIM_TIME_STEP)
 
 
 max_episode_length = MAX_EP_STEPS
 gamma = .99 # discount rate for advantage estimation and reward discounting
-load_model = False
-model_path = './model'
+
+load_model = True
+model_path = './result/model'
 
 
 
@@ -95,6 +98,10 @@ class AC_Network():
             #     kernel_size=[4,4],stride=[2,2],padding='VALID')
             hidden = slim.fully_connected(slim.flatten(self.inputs),256,activation_fn=tf.nn.elu)
             hidden = tf.layers.batch_normalization(hidden)
+
+            hidden = slim.fully_connected(hidden, 128,activation_fn=tf.nn.elu)
+            hidden = tf.layers.batch_normalization(hidden)
+
             #Recurrent network for temporal dependencies
             lstm_cell = tf.contrib.rnn.BasicLSTMCell(256,state_is_tuple=True)
             c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
@@ -165,7 +172,7 @@ class Worker():
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
-        self.summary_writer = tf.summary.FileWriter("train_"+str(self.number))
+        self.summary_writer = tf.summary.FileWriter("./result/train_"+str(self.number))
 
         #Create the local copy of the network and the tensorflow op to copy global paramters to local network
         self.local_AC = AC_Network(s_size,a_size,self.name,trainer)
@@ -214,6 +221,15 @@ class Worker():
         episode_count = sess.run(self.global_episodes)
         total_steps = 0
         print ("Starting worker " + str(self.number))
+
+        # # setup plot
+        # if PLOT:
+        #     plt.ion()
+        #     fig1 = plt.figure(1)
+        #     plot1 = fig1.add_subplot(131)
+        #     plot2 = fig1.add_subplot(132)
+        #     plot3 = fig1.add_subplot(133)
+
         with sess.as_default(), sess.graph.as_default():                 
             while not coord.should_stop():
                 # print "episode_count ", episode_count
@@ -230,6 +246,7 @@ class Worker():
                 episode_states.append(s)
                 rnn_state = self.local_AC.state_init
                 # print "terminate: ", self.env.terminated
+
                 while self.env.terminated == False:
 
                     #Take an action using probabilities from policy network output.
@@ -241,7 +258,7 @@ class Worker():
                     # print "a_dist[]: ", a_dist[0]
                     a_dist[0] = np.abs(a_dist[0])
                     a = np.random.choice(self.a_size, p=a_dist[0])
-                    
+                    # a = np.argmax(a_dist[])
                     # a = np.argmax(a_dist == a)
 
                     s2, terminal, info = self.env.step(a)
@@ -256,73 +273,42 @@ class Worker():
                     else:
                         s1 = s
 
-                    episode_buffer.append([s,a,r,s1,terminal,v[0,0]])
-                    episode_values.append(v[0,0])
                     last_state = np.copy(s)
                     episode_reward += r
                     s = s1                    
                     total_steps += 1
                     episode_step_count += 1
-                    
-                    # If the episode hasn't ended, but the experience buffer is full, then we
-                    # make an update step using that experience rollout.
-                    if len(episode_buffer) == 30 and terminal != True and episode_step_count != max_episode_length - 1:
-                        # Since we don't know what the true final return is, we "bootstrap" from our current
-                        # value estimation.
-                        v1 = sess.run(self.local_AC.value, 
-                            feed_dict={self.local_AC.inputs:[s],
-                            self.local_AC.state_in[0]:rnn_state[0],
-                            self.local_AC.state_in[1]:rnn_state[1]})[0,0]
-                        v_l,p_l,e_l,g_n,v_n = self.train(episode_buffer,sess,gamma,v1)
-                        episode_buffer = []
-                        sess.run(self.update_local_ops)
-                    if terminal == True:
-                        break
-                                            
-                self.episode_rewards.append(episode_reward)
-                self.episode_lengths.append(episode_step_count)
-                self.episode_mean_values.append(np.mean(episode_values))
+
+                    episode_values.append(v[0,0])
+                    self.episode_rewards.append(episode_reward)
+                    self.episode_lengths.append(episode_step_count)
+                    self.episode_mean_values.append(np.mean(episode_values))
                 
-                # Update the network using the experience buffer at the end of the episode.
-                if len(episode_buffer) != 0:
-                    v_l,p_l,e_l,g_n,v_n = self.train(episode_buffer,sess,gamma,0.0)
-                                
-                    
+                if terminal == True:
+                    # plot
+                    if PLOT:
+                        states = np.asarray(episode_states)
+                        plot_states(states)
+                        # plot1.plot(states[:,0])    
+                        # plot2.plot(states[:,1])  
+                        # plot3.plot(states[:,2])  
+                        # plt.pause(0.01)
+                        plt.show()
+
+
                 # Periodically save gifs of episodes, model parameters, and summary statistics.
                 if episode_count % SAVE_STEP == 0 and episode_count != 0:
-                    # print '5 epi'
-                    # if self.name == 'worker_0' and episode_count % 25 == 0:
-                    #     time_per_step = 0.05
-                    #     images = np.array(episode_states)
-                    #     make_gif(images,'./frames/image'+str(episode_count)+'.gif',
-                    #         duration=len(images)*time_per_step,true_image=True,salience=False)
-                    if episode_count % 250 == 0 and self.name == 'worker_0':
-                        saver.save(sess,self.model_path+'/model-'+str(episode_count)+'.cptk')
-                        print ("Saved Model")
-                        
-                    print "episode_count: ", episode_count
-                    print "last state: ", last_state[0:3]
+
                     mean_reward = np.mean(self.episode_rewards[-SAVE_STEP:])
                     mean_length = np.mean(self.episode_lengths[-SAVE_STEP:])
-                    mean_value = np.mean(self.episode_mean_values[-SAVE_STEP:])
-                    summary = tf.Summary()
-                    summary.value.add(tag='Perf/Reward', simple_value=float(mean_reward))
-                    summary.value.add(tag='Perf/Length', simple_value=float(mean_length))
-                    summary.value.add(tag='Perf/Value', simple_value=float(mean_value))
-                    summary.value.add(tag='Losses/Value Loss', simple_value=float(v_l))
-                    summary.value.add(tag='Losses/Policy Loss', simple_value=float(p_l))
-                    summary.value.add(tag='Losses/Entropy', simple_value=float(e_l))
-                    summary.value.add(tag='Losses/Grad Norm', simple_value=float(g_n))
-                    summary.value.add(tag='Losses/Var Norm', simple_value=float(v_n))
-                    self.summary_writer.add_summary(summary, episode_count)
-                    self.summary_writer.flush()
+                    mean_value = np.mean(self.episode_mean_values[-SAVE_STEP:])    
+                    print "episode_count: ", episode_count
+                    print "last state: ", last_state[0:3]
 
                     print "mean_reward: ", mean_reward
                     # print "mean_length: ", mean_length
                     print "mean_value: ", mean_value
 
-                if self.name == 'worker_0':
-                    sess.run(self.increment)
                 episode_count += 1
 
 
@@ -349,16 +335,12 @@ tf.reset_default_graph()
 if not os.path.exists(model_path):
     os.makedirs(model_path)
     
-#Create a directory to save episode playback gifs to
-if not os.path.exists('./frames'):
-    os.makedirs('./frames')
-
 with tf.device("/cpu:0"): 
     global_episodes = tf.Variable(0,dtype=tf.int32,name='global_episodes',trainable=False)
-    trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
+    trainer = tf.train.AdamOptimizer(learning_rate=1e-5)
     master_network = AC_Network(state_dim,action_dim,'global',None) # Generate global network
-    num_workers = multiprocessing.cpu_count() # Set workers ot number of available CPU threads
-    # num_workers = 1
+    # num_workers = multiprocessing.cpu_count() # Set workers ot number of available CPU threads
+    num_workers = 1
     workers = []
     # Create worker classes
     for i in range(num_workers):
@@ -379,14 +361,15 @@ with tf.Session(config=config) as sess:
     # This is where the asynchronous magic happens.
     # Start the "work" process for each worker in a separate threat.
     worker_threads = []
-    hover_position = np.asarray([0, 0, 0])
+    hover_position = np.asarray([0, 5, 5])
     task = hover(hover_position)
-
+    print "hover_position: ", hover_position
     for worker in workers:
-        worker_work = lambda: worker.work(task, max_episode_length,gamma,sess,coord,saver)
-        t = threading.Thread(target=(worker_work))
-        t.start()
-        sleep(0.5)
-        worker_threads.append(t)
-    coord.join(worker_threads)
+        worker.work(task, max_episode_length,gamma,sess,coord,saver)
+    #     worker_work = lambda: worker.work(task, max_episode_length,gamma,sess,coord,saver)
+    #     t = threading.Thread(target=(worker_work))
+    #     t.start()
+    #     sleep(0.5)
+    #     worker_threads.append(t)
+    # coord.join(worker_threads)
 
